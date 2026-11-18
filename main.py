@@ -4,7 +4,7 @@ FastAPI entry point - production ready for teacher use.
 """
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pathlib import Path
 import uvicorn
 from typing import Optional
@@ -24,22 +24,55 @@ SAMPLES_DIR = Path(__file__).parent / "samples"
 
 @app.get("/health")
 async def health():
-    """Simple health check endpoint."""
     return {"status": "ok", "service": "Digital Technologies Lesson Note Generator", "version": "1.0.0"}
 
 
 @app.get("/", response_class=HTMLResponse)
 async def home():
-    return """
+    weeks = "".join(f'<option value="{i}">{i}</option>' for i in range(1, 14))
+    return f"""
     <html>
-    <head><title>Digital Technologies Lesson Note Generator</title>
-    <style>body{font-family:system-ui,sans-serif;max-width:900px;margin:40px auto;padding:0 20px}h1{color:#1a237e}.card{background:#f5f5f5;padding:16px;border-radius:8px;margin:12px 0}a{color:#0d47a1}code{background:#e3f2fd;padding:2px 6px;border-radius:4px}</style>
+    <head>
+        <title>Digital Technologies Lesson Note Generator</title>
+        <style>
+            body{{font-family:system-ui,sans-serif;max-width:920px;margin:40px auto;padding:0 20px;line-height:1.5}}
+            h1{{color:#1a237e}} h2{{color:#0d47a1;margin-top:1.8em}}
+            .card{{background:#f5f5f5;padding:18px;border-radius:10px;margin:14px 0}}
+            a{{color:#0d47a1}} code{{background:#e3f2fd;padding:2px 6px;border-radius:4px}}
+            label{{display:block;margin:10px 0 4px;font-weight:600}}
+            select,button{{padding:8px 12px;font-size:15px;border-radius:6px;border:1px solid #90caf9}}
+            button{{background:#1a237e;color:white;border:none;cursor:pointer;margin-top:12px}}
+            button:hover{{background:#0d47a1}}
+        </style>
     </head>
     <body>
         <h1>Digital Technologies Lesson Note Generator</h1>
-        <p>NERDC 2025 • SS1 – SS3 • Production Ready</p>
+        <p>NERDC 2025 • SS1 – SS3 • Production Ready v1.0.0</p>
+
         <div class="card">
-            <h3>Quick Links</h3>
+            <h2>Get a Lesson Note</h2>
+            <form action="/lesson-form" method="get">
+                <label>Class</label>
+                <select name="class_level">
+                    <option value="SS1">SS1</option>
+                    <option value="SS2" selected>SS2</option>
+                    <option value="SS3">SS3</option>
+                </select>
+                <label>Term</label>
+                <select name="term">
+                    <option>First Term</option>
+                    <option selected>Second Term</option>
+                    <option>Third Term</option>
+                </select>
+                <label>Week</label>
+                <select name="week">{weeks}</select>
+                <br>
+                <button type="submit">Generate Lesson Note</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>Quick Links</h2>
             <ul>
                 <li><a href="/docs">API Documentation (Swagger)</a></li>
                 <li><a href="/topics">List all topics</a></li>
@@ -47,17 +80,21 @@ async def home():
                 <li><a href="/lesson/SS2/Second%20Term/2">Example: SS2 Second Term Week 2 (Python)</a></li>
             </ul>
         </div>
+
         <div class="card">
-            <h3>How to use</h3>
-            <ol>
-                <li>Open <code>/docs</code></li>
-                <li>Use <code>GET /lesson/{class_level}/{term}/{week}</code></li>
-                <li>Copy the generated lesson note</li>
-            </ol>
+            <h2>CLI / End-to-End Handwriting</h2>
+            <p>For personal handwriting font + Classmate PDF:</p>
+            <code>python scripts/end_to_end_pipeline.py --sample your_sample.jpg --class SS2 --term "Second Term" --week 2</code>
         </div>
     </body>
     </html>
     """
+
+
+@app.get("/lesson-form")
+async def lesson_form(class_level: str = "SS2", term: str = "Second Term", week: int = 2):
+    term_enc = term.replace(" ", "%20")
+    return RedirectResponse(url=f"/lesson/{class_level}/{term_enc}/{week}")
 
 
 @app.get("/topics")
