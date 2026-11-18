@@ -22,6 +22,12 @@ app = FastAPI(
 SAMPLES_DIR = Path(__file__).parent / "samples"
 
 
+@app.get("/health")
+async def health():
+    """Simple health check endpoint."""
+    return {"status": "ok", "service": "Digital Technologies Lesson Note Generator", "version": "1.0.0"}
+
+
 @app.get("/", response_class=HTMLResponse)
 async def home():
     return """
@@ -37,6 +43,7 @@ async def home():
             <ul>
                 <li><a href="/docs">API Documentation (Swagger)</a></li>
                 <li><a href="/topics">List all topics</a></li>
+                <li><a href="/health">Health Check</a></li>
                 <li><a href="/lesson/SS2/Second%20Term/2">Example: SS2 Second Term Week 2 (Python)</a></li>
             </ul>
         </div>
