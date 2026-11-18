@@ -34,6 +34,38 @@ docker compose up --build
 
 ---
 
+## Teacher Web App
+
+The repository now includes a separate React + TypeScript teacher interface. The Python curriculum, handwriting and PDF modules remain the source of truth.
+
+### Run locally
+
+Start the existing FastAPI service:
+
+```bash
+./run.sh
+```
+
+In a second terminal, start the frontend development server:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open the Vite address shown in the terminal (normally `http://localhost:5173`). The development server proxies API requests to the FastAPI service on port 8000.
+
+### Run with Docker
+
+```bash
+docker compose up --build
+```
+
+Open `http://localhost:8000`. The Docker build compiles the frontend and packages the static assets with the existing Python application.
+
+The teacher interface supports curriculum browsing, lesson review, copying the existing curriculum-based AI prompt, and handwriting-sample upload for PDF export. The prompt route returns a prompt; it does not call an AI model. Uploaded handwriting samples are processed temporarily by the existing Python pipeline and are not intentionally retained as permanent uploads.
+
 ## What is Included
 
 ### Core System

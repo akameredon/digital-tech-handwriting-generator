@@ -119,7 +119,7 @@ class FontCompiler:
         fb.setupNameTable({
             "familyName": family_name,
             "styleName": style_name,
-            "uniqueFontName": f"{family_name}-{style_name}",
+            "uniqueFontIdentifier": f"{family_name}-{style_name}",
             "fullName": f"{family_name} {style_name}",
             "version": "1.0",
             "psName": f"{family_name}-{style_name}".replace(" ", ""),
