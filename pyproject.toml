@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "digital-tech-lesson-generator"
+version = "1.0.0"
+description = "NERDC 2025 Digital Technologies Lesson Note Generator for Nigerian SS1–SS3"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "akameredon" }
+]
+dependencies = [
+    "opencv-python-headless>=4.8.0",
+    "Pillow>=10.0.0",
+    "numpy>=1.24.0",
+    "fonttools>=4.42.0",
+    "reportlab>=4.0.0",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.22.0",
+    "pydantic>=2.0",
+]
+
+[project.scripts]
+dt-notes = "scripts.generate_note:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
