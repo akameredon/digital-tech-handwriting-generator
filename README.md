@@ -1,13 +1,13 @@
 # Digital Technologies Lesson Note Generator
-**NERDC 2025 • SS1 – SS3 • Production Ready**
+**NERDC 2025 • SS1 – SS3 • Production Ready v1.0.0**
 
-Generate high-quality, curriculum-aligned lesson notes for Digital Technologies that teachers can use immediately in class or copy into exercise books.
+Generate high-quality, curriculum-aligned lesson notes for Digital Technologies that Nigerian secondary school teachers can use immediately.
 
 **Repository:** https://github.com/akameredon/digital-tech-handwriting-generator
 
 ---
 
-## Use Tomorrow Morning (Fastest Path)
+## Quick Start (Tomorrow Morning)
 
 ```bash
 git clone https://github.com/akameredon/digital-tech-handwriting-generator.git
@@ -19,78 +19,55 @@ pip install -r requirements.txt
 # Get any lesson note
 python scripts/generate_note.py --class SS2 --term "Second Term" --week 2
 
-# List all topics for a class
+# List all topics
 python scripts/generate_note.py --list SS1
 
-# Start web API
+# Start the web API
 ./run.sh
-# then open http://127.0.0.1:8000/docs
+# → http://127.0.0.1:8000/docs
+```
+
+Or with Docker:
+```bash
+docker compose up --build
 ```
 
 ---
 
-## What is Ready
+## What is Included
 
 ### Core System
-- Full official NERDC 2025 Digital Technologies schemes (SS1, SS2, SS3)
+- Full official NERDC 2025 Digital Technologies schemes (SS1–SS3)
 - Pedagogical prompt engine + validator
 - Handwriting preprocessor (OpenCV)
-- Font compiler (fontTools)
-- Classmate-style PDF exporter
-- FastAPI web service
+- Font compiler + Classmate-style PDF exporter
+- FastAPI service with health check
 - CLI tool
-- Docker support
+- GitHub Actions CI
+- Docker + docker-compose support
+- Teacher Guide + Sample Sheet instructions
 
-### Ready Lesson Notes
-**SS1 First Term**
-- Week 1: Introduction to Digital Technologies
-- Week 2: History & Evolution
-- Week 3: Number Systems
-- Week 4: Computer Hardware
-- Week 6: Computer Software
+### Ready Lesson Notes (30+)
+**SS1** – Introduction, History, Number Systems, Hardware, Software, Operating Systems, Networks, Internet, Cybersecurity I & II, Data Privacy, Spreadsheets, Presentation Software  
 
-**SS1 Second Term**
-- Week 6: Cybersecurity I
+**SS2** – Algorithms, Python, Variables, Control Structures, Data Science, Big Data, AI, Machine Learning, Web Design, Advanced Spreadsheet, Blockchain, Digital Entrepreneurship  
 
-**SS2 Second Term (core programming & data set)**
-- Week 1: Algorithms & Flowcharts
-- Week 2: Introduction to Python
-- Week 3: Variables, Data Types & Operators
-- Week 4: Control Structures
-- Week 6: Data Science Basics
-- Week 8: Big Data & Analytics
-- Week 9: Artificial Intelligence
-- Week 10: Machine Learning Basics
+**SS3** – Advanced Programming (Functions/Lists), OOP, SDLC, IoT, Advanced Web Design, SQL Basics  
 
-**SS3 First Term**
-- Week 3: Object-Oriented Programming Basics
-- Week 4: Software Development Life Cycle (SDLC)
-
-All notes follow the standard classroom structure:
+All notes follow the standard structure:  
 Behavioral Objectives → Key Concepts → Explanation → Practical Example → Class Activity → Quick Test → Assignment
 
 ---
 
-## Project Structure
-```
-digital-tech-handwriting-generator/
-├── main.py                  # FastAPI application
-├── run.sh                   # One-command start
-├── scripts/generate_note.py # CLI tool
-├── curriculum/              # NERDC schemes + prompt engine
-├── ingestion/               # Handwriting sample processing
-├── model/                   # Font compilation
-├── renderer/                # Classmate PDF export
-├── samples/                 # Ready lesson notes
-├── requirements.txt
-├── Dockerfile
-├── LICENSE
-└── .gitignore
-```
+## Documentation
+- [Teacher Guide](docs/TEACHER_GUIDE.md)
+- [Handwriting Sample Instructions](docs/SAMPLE_SHEET_INSTRUCTIONS.md)
+- [Contributing](docs/CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
 
 ---
 
 ## License
-MIT License – free for teachers and schools to use and modify.
+MIT – free for teachers and schools to use and modify.
 
-Built for Nigerian Digital Technologies teachers who need authentic, examination-ready lesson notes.
+Built to help Nigerian Digital Technologies teachers deliver curriculum-aligned lessons with confidence.
