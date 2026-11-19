@@ -1,4 +1,4 @@
-"""Build a TrueType font from whatever characters the teacher provided."""
+"""Build a TrueType font from teacher handwriting glyphs."""
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import logging
@@ -13,7 +13,6 @@ except ImportError:
 try:
     from fontTools.fontBuilder import FontBuilder
     from fontTools.pens.ttGlyphPen import TTGlyphPen
-    from fontTools.ttLib import TTFont
     FONTTOOLS_AVAILABLE = True
 except ImportError:
     FONTTOOLS_AVAILABLE = False
@@ -53,22 +52,28 @@ class FontCompiler:
             raise FontCompilationError(f"Glyph {glyph_name} has no valid image.")
         binary = (image > 0).astype(np.uint8) * 255
         ys, xs = np.where(binary > 0)
-        if len(xs) < 4:
+        if len(xs) < 6:
             raise FontCompilationError(f"Glyph {glyph_name} is empty or too faint.")
         x0, x1, y0, y1 = int(xs.min()), int(xs.max()), int(ys.min()), int(ys.max())
-        crop = binary[y0:y1+1, x0:x1+1]
+        crop = binary[y0:y1 + 1, x0:x1 + 1]
+        crop = cv2.copyMakeBorder(crop, 2, 2, 2, 2, cv2.BORDER_CONSTANT, value=0)
         h, w = crop.shape
         target = int(self.target_height * 0.72) if row in (3, 4) else self.target_height
         scale = target / max(1, h)
         glyph_w = max(1, int(round(w * scale)))
-        side_bearing = max(35, int(round(target * 0.10)))
+        side_bearing = max(40, int(round(target * 0.08)))
         advance = glyph_w + side_bearing * 2
         x_offset = side_bearing
         pen = TTGlyphPen(None)
         contours, hierarchy = cv2.findContours(crop, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
         if not contours:
             raise FontCompilationError(f"Glyph {glyph_name} contains no drawable contours.")
+        drew = False
         for index, contour in enumerate(contours):
+            if len(contour) < 3:
+                continue
+            eps = 0.002 * cv2.arcLength(contour, True)
+            contour = cv2.approxPolyDP(contour, max(0.5, eps), True)
             if len(contour) < 3:
                 continue
             points = []
@@ -83,6 +88,9 @@ class FontCompiler:
             for point in points[1:]:
                 pen.lineTo(point)
             pen.closePath()
+            drew = True
+        if not drew:
+            raise FontCompilationError(f"Glyph {glyph_name} had no usable contour.")
         metrics_out[glyph_name] = (advance, side_bearing)
         return pen.glyph()
 
@@ -138,7 +146,7 @@ class FontCompiler:
             "familyName": family_name, "styleName": style_name,
             "uniqueFontIdentifier": f"{family_name}-{style_name}",
             "fullName": f"{family_name} {style_name}",
-            "version": "1.1", "psName": f"{family_name}-{style_name}".replace(" ", ""),
+            "version": "1.1.2", "psName": f"{family_name}-{style_name}".replace(" ", ""),
         })
         fb.setupOS2()
         fb.setupPost()
