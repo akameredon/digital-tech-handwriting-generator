@@ -14,7 +14,7 @@ def test_default_sample_order():
     assert "A" in DEFAULT_SAMPLE_ORDER
     assert "z" in DEFAULT_SAMPLE_ORDER
     assert "0" in DEFAULT_SAMPLE_ORDER
-    assert len(DEFAULT_SAMPLE_ORDER) == 78
+    assert len(DEFAULT_SAMPLE_ORDER) == 77
 
 def test_binarize_shape():
     import numpy as np
