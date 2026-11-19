@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
-  exportHandwritingPdf,
+  exportLessonPdf,
   getLesson,
   getPrompt,
   getTopics,
@@ -21,16 +21,15 @@ function App() {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [lesson, setLesson] = useState<Lesson | null>(null);
   const [prompt, setPrompt] = useState("");
-  const [sample, setSample] = useState<File | null>(null);
-  const [samplePreview, setSamplePreview] = useState("");
   const [pdfUrl, setPdfUrl] = useState("");
+  const [exportingPdf, setExportingPdf] = useState(false);
   const [loadingTopics, setLoadingTopics] = useState(true);
   const [loadingLesson, setLoadingLesson] = useState(false);
   const [loadingPrompt, setLoadingPrompt] = useState(false);
-  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [copied, setCopied] = useState(false);
+  const lessonRequestId = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -43,24 +42,10 @@ function App() {
   }, [classLevel]);
 
   useEffect(() => {
-    if (!sample) {
-      setSamplePreview("");
-      return;
-    }
-    const url = URL.createObjectURL(sample);
-    setSamplePreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [sample]);
-
-  useEffect(() => {
     return () => {
       if (pdfUrl) URL.revokeObjectURL(pdfUrl);
     };
   }, [pdfUrl]);
-
-  useEffect(() => {
-    setPdfUrl("");
-  }, [classLevel, term, week, sample]);
 
   const selectedTopic = useMemo(
     () => topics.find((item) => item.term === term && item.week === week),
@@ -78,18 +63,32 @@ function App() {
     setCopied(false);
   }
 
+  function invalidateLesson() {
+    lessonRequestId.current += 1;
+    setLesson(null);
+    setPrompt("");
+    setPdfUrl("");
+    setLoadingLesson(false);
+    setExportingPdf(false);
+  }
+
   async function reviewLesson() {
     clearFeedback();
     setLoadingLesson(true);
     setPrompt("");
+    const requestId = ++lessonRequestId.current;
     try {
       const result = await getLesson(classLevel, term, week);
-      setLesson(result);
-      setNotice("Your lesson details are ready to review.");
+      if (requestId === lessonRequestId.current) {
+        setLesson(result);
+        setNotice("Your lesson details are ready to review.");
+      }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "We couldn't load this lesson.");
+      if (requestId === lessonRequestId.current) {
+        setError(reason instanceof Error ? reason.message : "We couldn't load this lesson.");
+      }
     } finally {
-      setLoadingLesson(false);
+      if (requestId === lessonRequestId.current) setLoadingLesson(false);
     }
   }
 
@@ -113,28 +112,29 @@ function App() {
     }
   }
 
-  async function createPdf() {
-    if (!sample) {
-      setError("Choose a clear handwriting sample image first.");
-      return;
-    }
+  async function downloadPrintablePdf() {
     clearFeedback();
-    setExporting(true);
+    setExportingPdf(true);
+    const requestId = lessonRequestId.current;
     try {
-      const blob = await exportHandwritingPdf(classLevel, term, week, sample);
+      const blob = await exportLessonPdf(classLevel, term, week);
       const nextUrl = URL.createObjectURL(blob);
+      if (requestId !== lessonRequestId.current) {
+        URL.revokeObjectURL(nextUrl);
+        return;
+      }
       setPdfUrl(nextUrl);
       const link = document.createElement("a");
       link.href = nextUrl;
-      link.download = `${classLevel}_${term.replaceAll(" ", "_")}_Week${week}_handwriting.pdf`;
+      link.download = `${classLevel}_${term.replaceAll(" ", "_")}_Week${week}_lesson.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
-      setNotice("Your handwriting-style PDF is ready and the download has started.");
+      setNotice("Your printable lesson PDF is ready and the download has started.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "We couldn't prepare the PDF.");
     } finally {
-      setExporting(false);
+      if (requestId === lessonRequestId.current) setExportingPdf(false);
     }
   }
 
@@ -188,7 +188,7 @@ function App() {
                 <h1>Prepare your next lesson.</h1>
                 <p>Choose a class, term and week. We’ll bring the curriculum and lesson materials together.</p>
               </div>
-              <StepBar activeStep={lesson ? (sample ? 3 : 2) : 1} />
+              <StepBar activeStep={pdfUrl ? 3 : lesson ? 2 : 1} />
               <section className="panel setup-panel">
                 <div className="panel-heading">
                   <div><span className="step-kicker">STEP 01</span><h2>Choose your lesson</h2><p>Start with the class and week you’re preparing for.</p></div>
@@ -196,17 +196,17 @@ function App() {
                 </div>
                 <div className="form-grid">
                   <Field label="Class">
-                    <select value={classLevel} onChange={(event) => { setClassLevel(event.target.value); setLesson(null); }}>
+                    <select value={classLevel} onChange={(event) => { invalidateLesson(); setClassLevel(event.target.value); }}>
                       {CLASSES.map((value) => <option key={value}>{value}</option>)}
                     </select>
                   </Field>
                   <Field label="Term">
-                    <select value={term} onChange={(event) => { setTerm(event.target.value); setLesson(null); }}>
+                    <select value={term} onChange={(event) => { invalidateLesson(); setTerm(event.target.value); }}>
                       {TERMS.map((value) => <option key={value}>{value}</option>)}
                     </select>
                   </Field>
                   <Field label="Week">
-                    <select value={week} onChange={(event) => { setWeek(Number(event.target.value)); setLesson(null); }}>
+                    <select value={week} onChange={(event) => { invalidateLesson(); setWeek(Number(event.target.value)); }}>
                       {Array.from({ length: 13 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>Week {value}</option>)}
                     </select>
                   </Field>
@@ -258,18 +258,16 @@ function App() {
               {lesson && (
                 <section className="panel export-panel">
                   <div className="panel-heading">
-                    <div><span className="step-kicker">STEP 03</span><h2>Make it look handwritten</h2><p>Upload a natural sample of your handwriting. No fixed worksheet or character order is required.</p>{lesson.content_status === "outline" && <p className="export-note">This PDF will contain the curriculum outline currently available, not an expanded lesson note.</p>}</div>
+                    <div><span className="step-kicker">STEP 03</span><h2>Download a printable copy</h2><p>Get a ruled PDF in standard text. The file uses the selected lesson content without pretending to reproduce handwriting.</p>{lesson.content_status === "outline" && <p className="export-note">This PDF contains the curriculum outline currently available, not a fully expanded lesson note.</p>}</div>
                     <span className="panel-icon">03</span>
                   </div>
-                  <UploadBox sample={sample} preview={samplePreview} onChange={setSample} />
-                  <p className="sample-help">You can use a notebook page, exercise-book page, or ordinary handwritten notes.</p>
                   <div className="panel-actions">
-                    <span className="helper-text">JPG or PNG · Up to 8 MB · Any clear handwritten page.</span>
-                    <button className="button button-primary" onClick={createPdf} disabled={!sample || exporting}>
-                      {exporting ? "Preparing your PDF…" : "Create handwriting PDF"} <span aria-hidden="true">→</span>
+                    <span className="helper-text">PDF · A4 ruled pages · Temporary server-side file.</span>
+                    <button className="button button-primary" onClick={downloadPrintablePdf} disabled={exportingPdf}>
+                      {exportingPdf ? "Preparing your PDF…" : "Download printable PDF"} <span aria-hidden="true">→</span>
                     </button>
                   </div>
-                  {pdfUrl && <div className="download-ready"><span>✓ Your PDF is ready.</span><a href={pdfUrl} download={`${classLevel}_${term.replaceAll(" ", "_")}_Week${week}_handwriting.pdf`}>Download PDF again →</a></div>}
+                  {pdfUrl && <div className="download-ready"><span>✓ Your PDF is ready.</span><a href={pdfUrl} download={`${classLevel}_${term.replaceAll(" ", "_")}_Week${week}_lesson.pdf`}>Download PDF again →</a></div>}
                 </section>
               )}
             </>
@@ -280,12 +278,12 @@ function App() {
               <div className="page-heading"><div className="eyebrow"><span className="eyebrow-line" /> CURRICULUM LIBRARY</div><h1>Explore the curriculum.</h1><p>Browse the Digital Technologies topics available for each senior secondary class.</p></div>
               <section className="panel">
                 <div className="form-grid two-fields">
-                  <Field label="Class"><select value={classLevel} onChange={(event) => setClassLevel(event.target.value)}>{CLASSES.map((value) => <option key={value}>{value}</option>)}</select></Field>
-                  <Field label="Term"><select value={term} onChange={(event) => setTerm(event.target.value)}>{TERMS.map((value) => <option key={value}>{value}</option>)}</select></Field>
+                  <Field label="Class"><select value={classLevel} onChange={(event) => { invalidateLesson(); setClassLevel(event.target.value); }}>{CLASSES.map((value) => <option key={value}>{value}</option>)}</select></Field>
+                  <Field label="Term"><select value={term} onChange={(event) => { invalidateLesson(); setTerm(event.target.value); }}>{TERMS.map((value) => <option key={value}>{value}</option>)}</select></Field>
                 </div>
                 <div className="topic-list">
                   {loadingTopics ? <p className="muted">Loading topics…</p> : filteredTopics.map((item) => (
-                    <button className={week === item.week ? "topic-row selected" : "topic-row"} key={item.week} onClick={() => { setWeek(item.week); setSection("create"); setLesson(null); }}>
+                    <button className={week === item.week ? "topic-row selected" : "topic-row"} key={item.week} onClick={() => { invalidateLesson(); setWeek(item.week); setSection("create"); }}>
                       <span className="week-number">{String(item.week).padStart(2, "0")}</span>
                       <span className="topic-row-copy"><strong>{item.topic}</strong><small>{item.content}</small></span>
                       <span className="row-arrow">→</span>
@@ -298,15 +296,10 @@ function App() {
 
           {section === "handwriting" && (
             <>
-              <div className="page-heading"><div className="eyebrow"><span className="eyebrow-line" /> HANDWRITING WORKFLOW</div><h1>Your handwriting, on the page.</h1><p>Turn a handwriting sample into a reusable font and a ruled lesson-note PDF.</p></div>
+              <div className="page-heading"><div className="eyebrow"><span className="eyebrow-line" /> HANDWRITING WORKFLOW</div><h1>Handwriting export is not ready.</h1><p>This feature is paused so the app does not mislabel handwriting or create a misleading font.</p></div>
               <section className="panel">
-                <div className="panel-heading"><div><span className="step-kicker">HOW IT WORKS</span><h2>Three simple steps</h2><p>The existing handwriting engine does the processing behind the scenes.</p></div></div>
-                <div className="how-grid">
-                  <HowCard number="01" title="Prepare your sample" body="Write naturally on a notebook or paper page and take a clear, well-lit photo." />
-                  <HowCard number="02" title="Upload your image" body="Choose a JPG or PNG image. You can preview it and replace it before processing." />
-                  <HowCard number="03" title="Download your PDF" body="The server analyzes your handwriting and, when recognition is available, builds a personalized font for your selected lesson." />
-                </div>
-                <div className="callout"><strong>Good results start with a clear sample.</strong><p>Keep the page in frame, avoid shadows and blur, and make sure the writing is dark enough to read.</p></div>
+                <div className="panel-heading"><div><span className="step-kicker">FEATURE STATUS</span><h2>No handwriting sample is needed for printable PDFs.</h2><p>The current server has no configured handwriting recognizer or reliable text-to-glyph alignment. Uploading a page could otherwise produce the wrong letters.</p></div></div>
+                <div className="callout"><strong>What works now</strong><p>Choose a lesson and download a ruled printable PDF in standard text. Handwriting-font export will remain disabled until recognition and real-sample validation are available.</p></div>
                 <button className="button button-primary" onClick={() => changeSection("create")}>Start a lesson <span aria-hidden="true">→</span></button>
               </section>
             </>
@@ -318,8 +311,8 @@ function App() {
               <section className="panel help-list">
                 <HelpItem title="How do I find my topic?" body="Choose your class, term and week. The curriculum topic and its content summary appear automatically." />
                 <HelpItem title="Why does my lesson say “Curriculum outline”?" body="A full prepared lesson note is not available for every week yet. You can copy a curriculum-aligned prompt and use it in your preferred AI tool." />
-                <HelpItem title="What handwriting image should I upload?" body="Use any clear JPG or PNG photo of your ordinary handwriting. Avoid blur, shadows and cropped edges; no fixed template is required." />
-                <HelpItem title="Where does my PDF go?" body="Your browser downloads the finished PDF to its normal downloads location. The app does not store your uploaded sample as a permanent file." />
+                <HelpItem title="Can I create a handwriting-style PDF?" body="Not yet. The server does not have reliable handwriting recognition and text-to-glyph alignment configured, so that feature is disabled rather than returning falsely labeled handwriting. You can download a standard printable PDF." />
+                <HelpItem title="Where does my printable PDF go?" body="Your browser downloads the generated PDF to its normal downloads location. The server writes the file to a temporary directory and removes it after sending the response." />
               </section>
             </>
           )}
@@ -360,19 +353,6 @@ function StepBar({ activeStep }: { activeStep: number }) {
       </span>;
     }).flatMap((item, index) => index < steps.length - 1 ? [item, <i key={`connector-${index}`} />] : [item])}
   </div>;
-}
-
-function UploadBox({ sample, preview, onChange }: { sample: File | null; preview: string; onChange: (file: File | null) => void }) {
-  return <label className="upload-box">
-    <input type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" onChange={(event) => onChange(event.target.files?.[0] ?? null)} />
-    {preview ? <img className="sample-preview" src={preview} alt="Preview of the selected handwriting sample" /> : <span className="upload-symbol">↑</span>}
-    <span className="upload-copy"><strong>{sample ? sample.name : "Choose your handwriting sample"}</strong><small>{sample ? "Select another file to replace this image." : "Tap to browse or choose a photo from your device."}</small></span>
-    <span className="button button-secondary upload-button">{sample ? "Replace image" : "Choose image"}</span>
-  </label>;
-}
-
-function HowCard({ number, title, body }: { number: string; title: string; body: string }) {
-  return <div className="how-card"><span>{number}</span><strong>{title}</strong><p>{body}</p></div>;
 }
 
 function HelpItem({ title, body }: { title: string; body: string }) {

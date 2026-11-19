@@ -2,7 +2,7 @@
 
 **Product:** Digital Technologies Lesson Note Generator  
 **Audience:** Nigerian secondary-school teachers (SS1–SS3)  
-**Primary goal:** Let a teacher select a curriculum lesson, understand what is available, prepare the note and access handwriting/PDF output without needing technical knowledge.
+**Primary goal:** Let a teacher select a curriculum lesson, understand what is available, prepare the note and download a standard printable PDF. The interface must clearly disclose that handwriting conversion is not currently available.
 
 ## 1. Product experience principles
 
@@ -22,7 +22,7 @@ Keep the primary navigation intentionally small:
 
 1. **Create lesson** — the main teacher workflow.
 2. **Curriculum** — browse SS1, SS2 and SS3 topics by term and week.
-3. **Handwriting** — explain the handwriting sample and PDF workflow, with a clear start action.
+3. **Handwriting** — explain that handwriting-to-font export is paused until real recognition and glyph alignment are available.
 4. **Help** — short teacher instructions and troubleshooting.
 
 On narrow screens, collapse navigation into a simple menu. Do not introduce a complex admin dashboard or account system unless a real requirement appears.
@@ -57,22 +57,17 @@ Use two honest statuses:
 
 If the teacher needs a fuller note and only an outline is available, offer **"Copy AI prompt"** using the existing `GET /prompt/{class_level}/{term}/{week}` route. Explain that the prompt can be used in an AI tool; do not claim the application itself has called an AI model.
 
-### Step 3 — Handwriting and PDF
+### Step 3 — Printable PDF and handwriting status
 
-The desired browser journey is:
-1. Explain the handwriting sample sheet and supported image requirements.
-2. Allow the teacher to select or capture a supported image.
-3. Preview the chosen image and allow replacement before processing.
-4. Show progress through preprocessing, font compilation and PDF rendering.
-5. Provide a PDF download and a clear retry path.
+The supported browser journey downloads a standard ruled PDF from `POST /export/lesson-pdf`. Show a clear loading state, report success only after a PDF response is received, and offer the resulting file for download again.
 
-**Implementation dependency:** these browser operations are not currently exposed as HTTP endpoints. Gate 3 must add a secure, bounded API adapter around the existing `HandwritingPreprocessor`, `FontCompiler`, existing lesson lookup and `ClassmatePDFExporter`. Do not reimplement those algorithms in JavaScript. Preserve the existing CLI workflow. Do not expose a working upload/export button until the route is implemented and tested.
+Handwriting-to-font export is unavailable. Do not show a handwriting upload control or imply that natural handwriting can be recognized. The legacy `POST /export/handwriting-pdf` endpoint currently returns HTTP 503; enabling it requires explicit integration of a genuine recognizer, verified text-to-image alignment, and real-sample acceptance tests. A fixed worksheet or position-based glyph assignment is not an acceptable substitute.
 
 ### Step 4 — Completion
 
 Show a calm success state with:
 - Selected lesson details.
-- Download PDF action, when a PDF was actually returned.
+- Standard printable PDF download action, when a PDF was actually returned.
 - Start another lesson action.
 - A short note explaining where the downloaded file is stored by the browser.
 
@@ -124,8 +119,8 @@ Aim for quiet, precise, premium educational software rather than a flashy AI lan
 - Lesson content renderer.
 - Prepared-note vs curriculum-outline status panel.
 - Copy prompt action with copy confirmation.
-- Handwriting upload dropzone and image preview.
-- Processing progress and error/retry panel.
+- Handwriting-feature status panel explaining why upload is disabled.
+- Printable-PDF progress and error/retry panel.
 - PDF download completion panel.
 - Empty, loading, offline and not-found states.
 

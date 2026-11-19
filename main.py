@@ -1,47 +1,34 @@
-"""
-Digital Technologies Handwriting Lesson Note Generator
-FastAPI entry point - production ready for teacher use.
-"""
+"""Digital Technologies lesson-note API and printable PDF service."""
 
-from io import BytesIO
+import logging
 from pathlib import Path
 import shutil
 import tempfile
-import threading
-import uuid
 from typing import Optional
 
 import uvicorn
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, Form, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from PIL import Image
 from starlette.background import BackgroundTask
 
 from curriculum.nerdc_schemes import get_lesson, list_all_topics
 from curriculum.prompt_engine import build_prompt
+from curriculum.sample_notes import get_prepared_lesson
 from curriculum.validator import is_exam_or_break_week
-from ingestion.preprocessor import DEFAULT_SAMPLE_ORDER, HandwritingPreprocessor, HandwritingSampleError
-from model.font_compiler import FontCompiler, FontCompilationError
 from renderer.pdf_exporter import ClassmatePDFExporter
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Digital Technologies Lesson Note Generator",
     description="NERDC 2025 aligned lesson notes for SS1-SS3 Digital Technologies",
-    version="1.1.1"
+    version="1.1.2"
 )
 
 ROOT_DIR = Path(__file__).parent
 SAMPLES_DIR = ROOT_DIR / "samples"
 FRONTEND_DIST = ROOT_DIR / "frontend" / "dist"
-MAX_SAMPLE_BYTES = 8 * 1024 * 1024
-MAX_IMAGE_PIXELS = 20_000_000
-PROCESSING_SLOTS = threading.BoundedSemaphore(2)
-ALLOWED_IMAGE_TYPES = {
-    "image/jpeg": ".jpg",
-    "image/png": ".png",
-}
-
 if (FRONTEND_DIST / "assets").is_dir():
     app.mount(
         "/assets",
@@ -52,7 +39,7 @@ if (FRONTEND_DIST / "assets").is_dir():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "Digital Technologies Lesson Note Generator", "version": "1.1.1"}
+    return {"status": "ok", "service": "Digital Technologies Lesson Note Generator", "version": "1.1.2"}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -79,7 +66,7 @@ async def home():
     </head>
     <body>
         <h1>Digital Technologies Lesson Note Generator</h1>
-        <p>NERDC 2025 • SS1 – SS3 • v1.1.1</p>
+        <p>NERDC 2025 • SS1 – SS3 • v1.1.2</p>
 
         <div class="card">
             <h2>Get a Lesson Note</h2>
@@ -124,6 +111,8 @@ async def lesson_form(class_level: str = "SS2", term: str = "Second Term", week:
 
 @app.get("/topics")
 async def get_topics(class_level: Optional[str] = None):
+    if class_level is not None and class_level not in {"SS1", "SS2", "SS3"}:
+        raise HTTPException(status_code=422, detail="class_level must be SS1, SS2, or SS3")
     return list_all_topics(class_level)
 
 
@@ -132,24 +121,9 @@ def build_lesson_payload(class_level: str, term: str, week: int):
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found in official NERDC scheme")
 
-    known_samples = {
-        ("SS2", "Second Term", 1): SAMPLES_DIR / "SS2_Second_Term" / "Week01_Computer_Programming_I.md",
-        ("SS2", "Second Term", 2): SAMPLES_DIR / "SS2_Second_Term" / "Week02_Introduction_to_Python.md",
-        ("SS2", "Second Term", 3): SAMPLES_DIR / "SS2_Second_Term" / "Week03_Programming_Basics.md",
-        ("SS2", "Second Term", 4): SAMPLES_DIR / "SS2_Second_Term" / "Week04_Control_Structures.md",
-        ("SS2", "Second Term", 6): SAMPLES_DIR / "SS2_Second_Term" / "Week06_Data_Science_Basics.md",
-        ("SS2", "Second Term", 8): SAMPLES_DIR / "SS2_Second_Term" / "Week08_Big_Data_Analytics.md",
-        ("SS2", "Second Term", 9): SAMPLES_DIR / "SS2_Second_Term" / "Week09_Artificial_Intelligence.md",
-        ("SS2", "Second Term", 10): SAMPLES_DIR / "SS2_Second_Term" / "Week10_Machine_Learning_Basics.md",
-        ("SS1", "First Term", 3): SAMPLES_DIR / "SS1_First_Term_Week3_Number_Systems.md",
-    }
-
-    key = (class_level, term, week)
-    prepared_path = known_samples.get(key)
-    is_prepared = bool(prepared_path and prepared_path.is_file())
-    if is_prepared:
-        lesson_content = prepared_path.read_text(encoding="utf-8")
-    else:
+    lesson_content = get_prepared_lesson(class_level, term, week, SAMPLES_DIR)
+    is_prepared = lesson_content is not None
+    if not is_prepared:
         lesson_content = f"""**Class:** {class_level}
 **Term:** {term}
 **Week:** {week}
@@ -212,108 +186,45 @@ async def get_generation_prompt(class_level: str, term: str, week: int):
     return {"prompt": prompt}
 
 
-@app.post("/export/handwriting-pdf")
-def export_handwriting_pdf(
+@app.post("/export/lesson-pdf")
+def export_lesson_pdf(
     class_level: str = Form(...),
     term: str = Form(...),
-    week: int = Form(...),
-    sample: UploadFile = File(...)
+    week: int = Form(...)
 ):
-    """Handwriting photo → font → notebook PDF. Accepts ordinary teacher samples."""
-    lesson = get_lesson(class_level, term, week)
-    if not lesson:
-        raise HTTPException(status_code=404, detail="Lesson not found in the curriculum.")
-
-    if sample.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(status_code=415, detail="Please upload a JPG or PNG image.")
-
-    file_bytes = sample.file.read(MAX_SAMPLE_BYTES + 1)
-    if not file_bytes:
-        raise HTTPException(status_code=400, detail="The selected image is empty.")
-    if len(file_bytes) > MAX_SAMPLE_BYTES:
-        raise HTTPException(status_code=413, detail="The image is larger than 8 MB. Choose a smaller image.")
-
+    """Create a printable ruled PDF without claiming to reproduce handwriting."""
+    payload = build_lesson_payload(class_level, term, week)
+    temp_dir = Path(tempfile.mkdtemp(prefix="dt-lesson-pdf-"))
     try:
-        with Image.open(BytesIO(file_bytes)) as image:
-            if image.width * image.height > MAX_IMAGE_PIXELS:
-                raise HTTPException(status_code=413, detail="This image is too large to process. Choose a lower-resolution photo.")
-            image.verify()
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(status_code=422, detail="We couldn't read this image. Choose a clear JPG or PNG file.")
-
-    if not PROCESSING_SLOTS.acquire(blocking=False):
-        raise HTTPException(status_code=503, detail="The handwriting service is busy. Please try again in a moment.")
-
-    temp_dir = None
-    try:
-        temp_dir = Path(tempfile.mkdtemp(prefix="dt-handwriting-"))
-        image_path = temp_dir / ALLOWED_IMAGE_TYPES[sample.content_type]
-        image_path.write_bytes(file_bytes)
-
-        # Open path: accept ordinary photos (no exact six-row template required).
-        preprocessor = HandwritingPreprocessor()
-        glyphs = preprocessor.process(
-            image_path,
-            expected_chars=DEFAULT_SAMPLE_ORDER,
-            save_debug=False
-        )
-        if len(glyphs) < 8:
-            raise HTTPException(
-                status_code=422,
-                detail="We found too few clear characters. Write letters clearly with a little space between them and try again."
-            )
-
-        unique_font_name = f"TeacherHandwriting_{uuid.uuid4().hex[:12]}"
-        font_path = FontCompiler().compile(
-            glyphs,
-            temp_dir / "teacher_handwriting.ttf",
-            family_name=unique_font_name
-        )
-        if not font_path or not Path(font_path).is_file():
-            raise HTTPException(
-                status_code=422,
-                detail="We could not build a font from this photo. Try a clearer image with dark ink on light paper."
-            )
-
-        note_text = build_lesson_payload(class_level, term, week)["lesson_note"]
-        pdf_path = ClassmatePDFExporter(
-            font_path=str(font_path),
-            font_name=unique_font_name
-        ).export_lesson(
-            note_text,
+        pdf_path = ClassmatePDFExporter().export_lesson(
+            payload["lesson_note"],
             temp_dir / "lesson_note.pdf",
-            title=f"{class_level} {term} Week {week}"
+            title=f"{class_level} {term} Week {week}",
         )
-        if not pdf_path.is_file() or pdf_path.stat().st_size == 0:
-            raise HTTPException(status_code=500, detail="The PDF could not be created. Please try again.")
-
-        filename = f"{class_level}_{term.replace(' ', '_')}_Week{week}_handwriting.pdf"
+        filename = f"{class_level}_{term.replace(' ', '_')}_Week{week}_lesson.pdf"
         return FileResponse(
             path=str(pdf_path),
             media_type="application/pdf",
             filename=filename,
-            background=BackgroundTask(shutil.rmtree, temp_dir, ignore_errors=True)
+            background=BackgroundTask(shutil.rmtree, temp_dir, ignore_errors=True),
         )
-    except HTTPException:
-        if temp_dir:
-            shutil.rmtree(temp_dir, ignore_errors=True)
-        raise
-    except (HandwritingSampleError, FontCompilationError) as exc:
-        if temp_dir:
-            shutil.rmtree(temp_dir, ignore_errors=True)
-        raise HTTPException(status_code=422, detail=str(exc))
     except Exception:
-        if temp_dir:
-            shutil.rmtree(temp_dir, ignore_errors=True)
-        raise HTTPException(
-            status_code=422,
-            detail="We could not read enough handwriting in this photo. Try a clearer image with dark ink on light paper."
-        )
-    finally:
-        sample.file.close()
-        PROCESSING_SLOTS.release()
+        logger.exception("Printable lesson PDF export failed")
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        raise HTTPException(status_code=500, detail="The printable PDF could not be created. Please try again.")
+
+
+@app.post("/export/handwriting-pdf")
+async def export_handwriting_pdf():
+    """Keep the legacy endpoint but refuse to fabricate handwriting without HTR."""
+    raise HTTPException(
+        status_code=503,
+        detail=(
+            "Handwriting-to-font export is disabled because this service has no integrated "
+            "handwriting recognizer or verified text-to-glyph alignment. No handwriting PDF was generated. "
+            "Use the printable lesson PDF instead."
+        ),
+    )
 
 
 if __name__ == "__main__":

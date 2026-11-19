@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT))
 
 from curriculum.nerdc_schemes import get_lesson, list_all_topics, NERDC_DIGITAL_TECHNOLOGIES
 from curriculum.prompt_engine import build_prompt
+from curriculum.sample_notes import get_prepared_lesson
 
 
 def main():
@@ -53,22 +54,9 @@ def main():
         print(prompt)
         return
 
-    samples_dir = ROOT / "samples"
-    known = {
-        ("SS2", "Second Term", 1): samples_dir / "SS2_Second_Term" / "Week01_Computer_Programming_I.md",
-        ("SS2", "Second Term", 2): samples_dir / "SS2_Second_Term" / "Week02_Introduction_to_Python.md",
-        ("SS2", "Second Term", 3): samples_dir / "SS2_Second_Term" / "Week03_Programming_Basics.md",
-        ("SS2", "Second Term", 4): samples_dir / "SS2_Second_Term" / "Week04_Control_Structures.md",
-        ("SS2", "Second Term", 6): samples_dir / "SS2_Second_Term" / "Week06_Data_Science_Basics.md",
-        ("SS2", "Second Term", 8): samples_dir / "SS2_Second_Term" / "Week08_Big_Data_Analytics.md",
-        ("SS2", "Second Term", 9): samples_dir / "SS2_Second_Term" / "Week09_Artificial_Intelligence.md",
-        ("SS2", "Second Term", 10): samples_dir / "SS2_Second_Term" / "Week10_Machine_Learning_Basics.md",
-        ("SS1", "First Term", 3): samples_dir / "SS1_First_Term_Week3_Number_Systems.md",
-    }
-
-    key = (args.class_level, args.term, args.week)
-    if key in known and known[key].exists():
-        print(known[key].read_text(encoding="utf-8"))
+    prepared_note = get_prepared_lesson(args.class_level, args.term, args.week)
+    if prepared_note is not None:
+        print(prepared_note)
     else:
         print(f"**Class:** {args.class_level}")
         print(f"**Term:** {args.term}")

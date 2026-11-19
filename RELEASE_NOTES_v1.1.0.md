@@ -1,5 +1,7 @@
 # D.Lesson Studio v1.1.0 — Launch candidate
 
+> **Superseded:** This historical launch candidate described handwriting upload and broader prepared-note coverage that were not verified. Current behavior is documented in [v1.1.2 release notes](RELEASE_NOTES_v1.1.2.md); handwriting-to-font export is disabled.
+
 ## Teacher experience
 - Simple three-step flow: choose lesson → upload handwriting photo → download notebook PDF
 - Auto-loads full curriculum notes (SS1–SS3 instructional weeks)

@@ -33,6 +33,20 @@ async function readJson<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+async function readBlob(response: Response): Promise<Blob> {
+  if (!response.ok) {
+    let message = "We couldn't create the printable PDF. Please try again.";
+    try {
+      const body = await response.json() as { detail?: string };
+      if (body.detail) message = body.detail;
+    } catch {
+      // Keep the plain-language fallback for non-JSON errors.
+    }
+    throw new Error(message);
+  }
+  return response.blob();
+}
+
 export async function getTopics(classLevel: string): Promise<Topic[]> {
   const query = new URLSearchParams({ class_level: classLevel });
   return readJson<Topic[]>(await fetch(`${API_BASE}/topics?${query}`));
@@ -49,30 +63,17 @@ export async function getPrompt(classLevel: string, term: string, week: number):
   return body.prompt;
 }
 
-export async function exportHandwritingPdf(
+export async function exportLessonPdf(
   classLevel: string,
   term: string,
-  week: number,
-  sample: File
+  week: number
 ): Promise<Blob> {
   const form = new FormData();
   form.append("class_level", classLevel);
   form.append("term", term);
   form.append("week", String(week));
-  form.append("sample", sample);
-  const response = await fetch(`${API_BASE}/export/handwriting-pdf`, {
+  return readBlob(await fetch(`${API_BASE}/export/lesson-pdf`, {
     method: "POST",
     body: form
-  });
-  if (!response.ok) {
-    let message = "We couldn't prepare the PDF. Please check your image and try again.";
-    try {
-      const body = await response.json() as { detail?: string };
-      if (body.detail) message = body.detail;
-    } catch {
-      // Keep the plain-language fallback for non-JSON errors.
-    }
-    throw new Error(message);
-  }
-  return response.blob();
+  }));
 }

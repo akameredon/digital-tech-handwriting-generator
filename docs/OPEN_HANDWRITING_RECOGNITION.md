@@ -1,26 +1,33 @@
 # Open Handwriting Recognition — Architecture Decision
 
-Status: proposed implementation plan; not yet implemented or deployed.
+Status: recognition and text-to-glyph alignment are not implemented. In v1.1.2 the web UI no longer accepts handwriting uploads, and the legacy handwriting-PDF endpoint returns HTTP 503. Standard printable lesson PDFs remain available.
 
 ## Product decision
 
-D.Lesson Studio accepts natural handwriting samples. A fixed six-row character sheet, fixed row count, fixed order, and mandatory punctuation row are not product requirements. The six-row sheet may remain as an optional calibration aid, but it must never be required.
+The intended product should eventually accept natural handwriting samples. The current application does not convert handwriting samples into fonts or PDFs. A fixed six-row character sheet, fixed row count, fixed order, and mandatory punctuation row are not suitable substitutes for recognition. The six-row sheet may remain an optional evaluation aid, but it must never be required as the product workflow.
 
 The uploaded sample is evidence of a writer's style, not a positional character key.
 
-## Existing blockers verified in main
+## Current implementation status
 
-- ingestion/preprocessor.py requires exactly six row bands and maps components to DEFAULT_SAMPLE_ROWS by left-to-right position.
+- `main.py` currently returns HTTP 503 for handwriting-to-font requests. Enabling the route requires explicit integration of both a recognizer and a verified text-to-glyph alignment pipeline; configuration alone is not sufficient.
+- The browser no longer uploads handwriting samples. It offers a standard ruled printable PDF instead.
+- `ingestion/open_handwriting.py` contains image-layout analysis and a recognizer contract, but no recognition provider is configured or called by the export route.
+- The legacy positional glyph compiler remains in the repository for isolated development work. It must not be used to label arbitrary natural writing.
 
-- main.py explicitly passes DEFAULT_SAMPLE_ORDER into that preprocessor.
+## Historical pipeline risks that motivated disabling export
 
-- model/font_compiler.py rejects any glyph set that does not contain every character in REQUIRED_CHARS.
+- Before v1.1.2, the web route mapped connected components to DEFAULT_SAMPLE_ORDER by position, without recognizing the written characters.
 
-- renderer/pdf_exporter.py requires a complete alphabet and digit cmap before registering the custom font.
+- The former route passed arbitrary uploaded pages to that positional mapper, despite the UI saying that a natural page was acceptable.
 
-- frontend/src/App.tsx instructs users to upload the complete sample sheet.
+- The current font compiler fills absent characters with rectangle glyphs and adds them to the font cmap; a successful font build therefore did not prove that glyphs were correctly recognized.
 
-- main.py catches all unexpected exceptions and returns the same generic 422 message without logging the traceback.
+- The PDF exporter treats cmap entries as supported, including placeholder rectangle glyphs.
+
+- The former frontend advertised natural handwriting uploads as a working feature.
+
+- The former route could return a generic image-quality error for unexpected pipeline failures, obscuring the cause.
 
 Removing only the row-count check would be unsafe: extracted image components have no Unicode identity unless a recognizer or a human correction supplies it.
 
