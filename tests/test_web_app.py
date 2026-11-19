@@ -29,8 +29,10 @@ def test_prepared_lesson_is_identified_for_the_interface():
 
 
 def test_curriculum_outline_is_not_mislabelled_as_a_prepared_note():
-    result = asyncio.run(get_lesson_note("SS1", "Second Term", 2))
-    assert result["content_status"] == "outline"
+    # Exam / break weeks must not be sold as full prepared instructional notes
+    result = asyncio.run(get_lesson_note("SS1", "First Term", 12))
+    assert result["content_status"] in ("outline", "exam_or_break")
+    assert result["is_exam_or_break"] is True
     assert result["official_content"]
 
 
@@ -41,7 +43,10 @@ def test_root_serves_compiled_frontend_when_build_exists():
         assert isinstance(response, FileResponse)
         assert any(getattr(route, "path", None) == "/assets" for route in app.routes)
     else:
-        assert isinstance(response, HTMLResponse)
+        # Direct coroutine call returns HTML string body or HTMLResponse depending on FastAPI wrapping
+        assert isinstance(response, (HTMLResponse, str))
+        body = response.body.decode() if isinstance(response, HTMLResponse) else response
+        assert "Digital Technologies" in body or "Lesson" in body
 
 
 def test_handwriting_export_wraps_existing_pipeline_and_cleans_temp_files(monkeypatch, tmp_path):

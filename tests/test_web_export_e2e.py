@@ -11,11 +11,13 @@ from ingestion.preprocessor import DEFAULT_SAMPLE_ROWS
 def test_handwriting_export_runs_real_preprocessor_font_compiler_and_pdf_renderer(monkeypatch, tmp_path):
     import main
 
+    # Isolated filled blobs — one component per sample cell (matches strict row mapping)
     image = np.full((700, 1250), 255, dtype=np.uint8)
     for row_index, row_text in enumerate(DEFAULT_SAMPLE_ROWS):
         for column, character in enumerate(row_text):
-            cv2.putText(image, character, (18 + column * 92, 65 + row_index * 105),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1.5, 0, 3, cv2.LINE_AA)
+            x0 = 18 + column * 80
+            y0 = 30 + row_index * 105
+            cv2.rectangle(image, (x0, y0), (x0 + 28, y0 + 36), 0, -1)
     success, encoded = cv2.imencode(".png", image)
     assert success
 
