@@ -23,11 +23,15 @@ from starlette.background import BackgroundTask
 from curriculum.nerdc_schemes import get_lesson, list_all_topics
 from curriculum.prompt_engine import build_prompt
 from curriculum.validator import is_exam_or_break_week
-from ingestion.open_handwriting import (\n    OpenHandwritingIntake, ConfiguredRecognizer, RecognitionUnavailable, HandwritingIntakeError\n)
+from ingestion.open_handwriting import (
+    OpenHandwritingIntake, ConfiguredRecognizer, RecognitionUnavailable, HandwritingIntakeError
+)
 from model.font_compiler import FontCompiler
 from renderer.pdf_exporter import ClassmatePDFExporter
 
-logger = logging.getLogger(__name__)\n\napp = FastAPI(
+logger = logging.getLogger(__name__)
+
+app = FastAPI(
     title="Digital Technologies Lesson Note Generator",
     description="NERDC 2025 aligned lesson notes for SS1-SS3 Digital Technologies",
     version="1.0.0"
