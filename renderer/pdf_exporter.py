@@ -1,10 +1,11 @@
 """
-PDF Exporter – Classmate-style ruled notebook pages
-Supports optional custom TrueType handwriting font.
+PDF Exporter – Classmate-style ruled notebook pages.
+Custom handwriting is used only for characters actually present in the
+compiled font. Unsupported characters (especially spaces and punctuation)
+are rendered with a readable system font instead of the font's .notdef box.
 """
-
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Set
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
@@ -13,6 +14,11 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 import textwrap
 import re
+
+try:
+    from fontTools.ttLib import TTFont as FontToolsTTFont
+except ImportError:
+    FontToolsTTFont = None
 
 
 class ClassmatePDFExporter:
@@ -39,35 +45,74 @@ class ClassmatePDFExporter:
         self.blue_line = HexColor("#90CAF9")
         self.font_name = "Helvetica"
         self.font_name_bold = "Helvetica-Bold"
+        self.handwriting_codepoints: Set[int] = set()
 
-        if font_path and Path(font_path).exists():
+        if font_path and Path(font_path).is_file():
             try:
+                if FontToolsTTFont is None:
+                    raise RuntimeError("fontTools is required to inspect handwriting font coverage")
+                inspected = FontToolsTTFont(font_path, lazy=True)
+                self.handwriting_codepoints = set((inspected.getBestCmap() or {}).keys())
+                inspected.close()
+                if not self.handwriting_codepoints:
+                    raise ValueError("The compiled font has no usable character map")
                 pdfmetrics.registerFont(TTFont(font_name, font_path))
                 self.font_name = font_name
                 self.font_name_bold = font_name
-                print(f"Using custom handwriting font: {font_path}")
-            except Exception as e:
-                print(f"Could not register custom font ({e}), falling back to Helvetica")
+                print(
+                    f"Using custom handwriting font: {font_path} "
+                    f"({len(self.handwriting_codepoints)} mapped characters)"
+                )
+            except Exception as exc:
+                self.handwriting_codepoints = set()
+                self.font_name = "Helvetica"
+                self.font_name_bold = "Helvetica-Bold"
+                print(f"Handwriting font rejected; using readable fallback: {exc}")
+
+    def _draw_text(self, c: canvas.Canvas, x: float, y: float, text: str, size: float):
+        """Draw mixed-font text without emitting missing-glyph .notdef boxes."""
+        cursor = x
+        for char in text:
+            use_handwriting = (
+                self.font_name not in ("Helvetica", "Helvetica-Bold")
+                and ord(char) in self.handwriting_codepoints
+            )
+            font = self.font_name if use_handwriting else "Helvetica"
+            c.setFont(font, size)
+            c.drawString(cursor, y, char)
+            cursor += pdfmetrics.stringWidth(char, font, size)
 
     def _draw_ruled_page(self, c: canvas.Canvas):
         c.setStrokeColor(self.pink)
         c.setLineWidth(1.2)
-        c.line(self.margin_left - 3 * mm, self.margin_bottom,
-               self.margin_left - 3 * mm, self.page_height - self.margin_top + 5 * mm)
+        c.line(
+            self.margin_left - 3 * mm,
+            self.margin_bottom,
+            self.margin_left - 3 * mm,
+            self.page_height - self.margin_top + 5 * mm,
+        )
         c.setStrokeColor(self.blue_line)
         c.setLineWidth(0.6)
         y = self.page_height - self.margin_top
         while y > self.margin_bottom:
-            c.line(self.margin_left - 5 * mm, y, self.page_width - self.margin_right, y)
+            c.line(
+                self.margin_left - 5 * mm,
+                y,
+                self.page_width - self.margin_right,
+                y,
+            )
             y -= self.line_height
 
     def _draw_header(self, c: canvas.Canvas, title: str, page_num: int):
         c.setFillColor(black)
-        c.setFont(self.font_name_bold, 9)
-        c.drawString(self.margin_left, self.page_height - 12 * mm, title[:60])
-        c.setFont(self.font_name, 8)
-        c.drawRightString(self.page_width - self.margin_right,
-                          self.page_height - 12 * mm, f"Page {page_num}")
+        self._draw_text(c, self.margin_left, self.page_height - 12 * mm, title[:60], 9)
+        self._draw_text(
+            c,
+            self.page_width - self.margin_right - 28 * mm,
+            self.page_height - 12 * mm,
+            f"Page {page_num}",
+            8,
+        )
 
     def export_lesson(self, text: str, output_path: str | Path, title: str = "Digital Technologies Lesson Note") -> Path:
         output_path = Path(output_path)
@@ -84,11 +129,11 @@ class ClassmatePDFExporter:
             cleaned = re.sub(r"\*\*(.+?)\*\*", r"\1", raw)
             cleaned = re.sub(r"`([^`]+)`", r"\1", cleaned)
             wrapped = textwrap.wrap(cleaned, width=85) or [""]
+
             lines.extend(wrapped)
 
         usable_height = self.page_height - self.margin_top - self.margin_bottom
         lines_per_page = int(usable_height / self.line_height) - 2
-
         idx = 0
         while idx < len(lines):
             self._draw_ruled_page(c)
@@ -100,10 +145,9 @@ class ClassmatePDFExporter:
                 line = lines[idx]
                 c.setFillColor(black)
                 if line.isupper() or line.endswith(":") or "Objective" in line or "Assignment" in line:
-                    c.setFont(self.font_name_bold, 10)
+                    self._draw_text(c, self.margin_left, y, line[:95], 10)
                 else:
-                    c.setFont(self.font_name, 10)
-                c.drawString(self.margin_left, y, line[:95])
+                    self._draw_text(c, self.margin_left, y, line[:95], 10)
                 y -= self.line_height
                 idx += 1
             c.showPage()
