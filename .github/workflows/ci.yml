@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ main ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -17,19 +21,60 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest
 
-      - name: Run curriculum tests
-        run: python tests/test_curriculum.py
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
 
-      - name: Run preprocessor tests
-        run: python tests/test_preprocessor.py
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
 
-      - name: Check imports
+      - name: Summarize frontend dependency advisories
+        working-directory: frontend
         run: |
-          python -c "from curriculum.nerdc_schemes import get_lesson; print(get_lesson('SS2', 'Second Term', 2))"
-          python -c "from curriculum.prompt_engine import build_prompt; print('prompt engine ok')"
+          npm audit --json > /tmp/npm-audit.json || true
+          node -e 'const report = require("/tmp/npm-audit.json"); const items = Object.entries(report.vulnerabilities || {}).map(([name, value]) => ({ name, severity: value.severity, direct: value.isDirect, fixAvailable: value.fixAvailable })); console.log(JSON.stringify(items, null, 2));'
+
+      - name: Audit shipped frontend dependencies
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Type-check frontend
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Build Docker image
+        run: docker build -t digital-tech-handwriting-generator:ci .
+
+      - name: Smoke-test the built Docker application
+        run: |
+          docker run -d --name dt-lesson-ui-ci -p 8000:8000 digital-tech-handwriting-generator:ci
+          trap 'docker rm -f dt-lesson-ui-ci >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:8000/health >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:8000/ | grep -q "Digital Technologies Lesson Studio"
+          curl -fsS "http://127.0.0.1:8000/topics?class_level=SS2" >/dev/null
+          curl -fsS http://127.0.0.1:8000/health
+
+      - name: Run complete Python test suite
+        run: python -m pytest tests/ -v
+
+      - name: Verify application imports
+        run: |
+          python -c "from main import app; print('FastAPI app import ok')"
+          python -c "from curriculum.nerdc_schemes import get_lesson; assert get_lesson('SS2', 'Second Term', 2)"

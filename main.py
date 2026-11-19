@@ -3,15 +3,27 @@ Digital Technologies Handwriting Lesson Note Generator
 FastAPI entry point - production ready for teacher use.
 """
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
+from io import BytesIO
 from pathlib import Path
-import uvicorn
+import shutil
+import tempfile
+import threading
+import uuid
 from typing import Optional
+
+import uvicorn
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from PIL import Image
+from starlette.background import BackgroundTask
 
 from curriculum.nerdc_schemes import get_lesson, list_all_topics
 from curriculum.prompt_engine import build_prompt
 from curriculum.validator import is_exam_or_break_week
+from ingestion.preprocessor import DEFAULT_SAMPLE_ORDER, HandwritingPreprocessor
+from model.font_compiler import FontCompiler
+from renderer.pdf_exporter import ClassmatePDFExporter
 
 app = FastAPI(
     title="Digital Technologies Lesson Note Generator",
@@ -19,7 +31,25 @@ app = FastAPI(
     version="1.0.0"
 )
 
-SAMPLES_DIR = Path(__file__).parent / "samples"
+ROOT_DIR = Path(__file__).parent
+SAMPLES_DIR = ROOT_DIR / "samples"
+FRONTEND_DIST = ROOT_DIR / "frontend" / "dist"
+MAX_SAMPLE_BYTES = 8 * 1024 * 1024
+MAX_IMAGE_PIXELS = 20_000_000
+PROCESSING_SLOTS = threading.BoundedSemaphore(2)
+ALLOWED_IMAGE_TYPES = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+}
+
+# Serve the compiled teacher interface when a production frontend build exists.
+# The existing HTML homepage remains as a safe fallback for Python-only installs.
+if (FRONTEND_DIST / "assets").is_dir():
+    app.mount(
+        "/assets",
+        StaticFiles(directory=str(FRONTEND_DIST / "assets")),
+        name="frontend-assets"
+    )
 
 
 @app.get("/health")
@@ -29,6 +59,10 @@ async def health():
 
 @app.get("/", response_class=HTMLResponse)
 async def home():
+    frontend_index = FRONTEND_DIST / "index.html"
+    if frontend_index.is_file():
+        return FileResponse(frontend_index)
+
     weeks = "".join(f'<option value="{i}">{i}</option>' for i in range(1, 14))
     return f"""
     <html>
@@ -102,8 +136,7 @@ async def get_topics(class_level: Optional[str] = None):
     return list_all_topics(class_level)
 
 
-@app.get("/lesson/{class_level}/{term}/{week}")
-async def get_lesson_note(class_level: str, term: str, week: int):
+def build_lesson_payload(class_level: str, term: str, week: int):
     lesson = get_lesson(class_level, term, week)
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found in official NERDC scheme")
@@ -121,10 +154,12 @@ async def get_lesson_note(class_level: str, term: str, week: int):
     }
 
     key = (class_level, term, week)
-    if key in known_samples and known_samples[key].exists():
-        content = known_samples[key].read_text(encoding="utf-8")
+    prepared_path = known_samples.get(key)
+    is_prepared = bool(prepared_path and prepared_path.is_file())
+    if is_prepared:
+        lesson_content = prepared_path.read_text(encoding="utf-8")
     else:
-        content = f"""**Class:** {class_level}
+        lesson_content = f"""**Class:** {class_level}
 **Term:** {term}
 **Week:** {week}
 **Topic:** {lesson['topic']}
@@ -168,8 +203,14 @@ Give students a short practical or written task based on the topic.
         "topic": lesson["topic"],
         "official_content": lesson["content"],
         "is_exam_or_break": is_exam_or_break_week(lesson["topic"]),
-        "lesson_note": content
+        "lesson_note": lesson_content,
+        "content_status": "prepared" if is_prepared else "outline"
     }
+
+
+@app.get("/lesson/{class_level}/{term}/{week}")
+async def get_lesson_note(class_level: str, term: str, week: int):
+    return build_lesson_payload(class_level, term, week)
 
 
 @app.get("/prompt/{class_level}/{term}/{week}")
@@ -178,6 +219,102 @@ async def get_generation_prompt(class_level: str, term: str, week: int):
     if not prompt:
         raise HTTPException(status_code=404, detail="No prompt available for this week")
     return {"prompt": prompt}
+
+
+@app.post("/export/handwriting-pdf")
+def export_handwriting_pdf(
+    class_level: str = Form(...),
+    term: str = Form(...),
+    week: int = Form(...),
+    sample: UploadFile = File(...)
+):
+    """Run the existing handwriting → font → PDF pipeline for a browser upload."""
+    lesson = get_lesson(class_level, term, week)
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found in the curriculum.")
+
+    if sample.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=415, detail="Please upload a JPG or PNG image.")
+
+    file_bytes = sample.file.read(MAX_SAMPLE_BYTES + 1)
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="The selected image is empty.")
+    if len(file_bytes) > MAX_SAMPLE_BYTES:
+        raise HTTPException(status_code=413, detail="The image is larger than 8 MB. Choose a smaller image.")
+
+    try:
+        with Image.open(BytesIO(file_bytes)) as image:
+            if image.width * image.height > MAX_IMAGE_PIXELS:
+                raise HTTPException(status_code=413, detail="This image is too large to process. Choose a lower-resolution photo.")
+            image.verify()
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=422, detail="We couldn't read this image. Choose a clear JPG or PNG file.")
+
+    if not PROCESSING_SLOTS.acquire(blocking=False):
+        raise HTTPException(status_code=503, detail="The handwriting service is busy. Please try again in a moment.")
+
+    temp_dir = None
+    try:
+        temp_dir = Path(tempfile.mkdtemp(prefix="dt-handwriting-"))
+        image_path = temp_dir / ALLOWED_IMAGE_TYPES[sample.content_type]
+        image_path.write_bytes(file_bytes)
+
+        preprocessor = HandwritingPreprocessor()
+        glyphs = preprocessor.process(
+            image_path,
+            expected_chars=DEFAULT_SAMPLE_ORDER,
+            save_debug=False
+        )
+        if len(glyphs) < 20:
+            raise HTTPException(
+                status_code=422,
+                detail="We found too few characters. Upload a clear photo of the complete handwriting sample sheet."
+            )
+
+        unique_font_name = f"TeacherHandwriting_{uuid.uuid4().hex[:12]}"
+        font_path = FontCompiler().compile(
+            glyphs,
+            temp_dir / "teacher_handwriting.ttf",
+            family_name=unique_font_name
+        )
+        if not font_path or not Path(font_path).is_file():
+            raise HTTPException(status_code=422, detail="We couldn't build a handwriting font from this sample. Please check the sample sheet and try again.")
+
+        note_text = build_lesson_payload(class_level, term, week)["lesson_note"]
+        pdf_path = ClassmatePDFExporter(
+            font_path=str(font_path),
+            font_name=unique_font_name
+        ).export_lesson(
+            note_text,
+            temp_dir / "lesson_note.pdf",
+            title=f"{class_level} {term} Week {week}"
+        )
+        if not pdf_path.is_file() or pdf_path.stat().st_size == 0:
+            raise HTTPException(status_code=500, detail="The PDF could not be created. Please try again.")
+
+        filename = f"{class_level}_{term.replace(' ', '_')}_Week{week}_handwriting.pdf"
+        return FileResponse(
+            path=str(pdf_path),
+            media_type="application/pdf",
+            filename=filename,
+            background=BackgroundTask(shutil.rmtree, temp_dir, ignore_errors=True)
+        )
+    except HTTPException:
+        if temp_dir:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        raise
+    except Exception:
+        if temp_dir:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        raise HTTPException(
+            status_code=422,
+            detail="We couldn't process this sample. Check that it is a clear, complete handwriting sheet and try again."
+        )
+    finally:
+        sample.file.close()
+        PROCESSING_SLOTS.release()
 
 
 if __name__ == "__main__":

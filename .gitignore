@@ -33,3 +33,7 @@ htmlcov/
 
 # Local notes
 *.local.md
+
+# Frontend dependencies and generated build output
+node_modules/
+frontend/dist/

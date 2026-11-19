@@ -1,6 +1,13 @@
-FROM python:3.11-slim
+# Build the teacher-facing React application as static assets.
+FROM node:22-alpine AS frontend-build
+WORKDIR /frontend
+COPY frontend/package*.json ./
+RUN npm install
+COPY frontend/ ./
+RUN npm run build
 
-# System dependencies for OpenCV and FontForge
+# Keep the existing Python/FastAPI runtime and its native dependencies.
+FROM python:3.11-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
@@ -11,11 +18,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
 COPY . .
+COPY --from=frontend-build /frontend/dist /app/frontend/dist
 
-# Default command (can be overridden)
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
