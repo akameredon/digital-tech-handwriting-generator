@@ -21,14 +21,14 @@ from starlette.background import BackgroundTask
 from curriculum.nerdc_schemes import get_lesson, list_all_topics
 from curriculum.prompt_engine import build_prompt
 from curriculum.validator import is_exam_or_break_week
-from ingestion.preprocessor import DEFAULT_SAMPLE_ORDER, HandwritingPreprocessor
-from model.font_compiler import FontCompiler
+from ingestion.preprocessor import DEFAULT_SAMPLE_ORDER, HandwritingPreprocessor, HandwritingSampleError
+from model.font_compiler import FontCompiler, FontCompilationError
 from renderer.pdf_exporter import ClassmatePDFExporter
 
 app = FastAPI(
     title="Digital Technologies Lesson Note Generator",
     description="NERDC 2025 aligned lesson notes for SS1-SS3 Digital Technologies",
-    version="1.0.0"
+    version="1.1.1"
 )
 
 ROOT_DIR = Path(__file__).parent
@@ -42,8 +42,6 @@ ALLOWED_IMAGE_TYPES = {
     "image/png": ".png",
 }
 
-# Serve the compiled teacher interface when a production frontend build exists.
-# The existing HTML homepage remains as a safe fallback for Python-only installs.
 if (FRONTEND_DIST / "assets").is_dir():
     app.mount(
         "/assets",
@@ -54,7 +52,7 @@ if (FRONTEND_DIST / "assets").is_dir():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "Digital Technologies Lesson Note Generator", "version": "1.0.0"}
+    return {"status": "ok", "service": "Digital Technologies Lesson Note Generator", "version": "1.1.1"}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -81,7 +79,7 @@ async def home():
     </head>
     <body>
         <h1>Digital Technologies Lesson Note Generator</h1>
-        <p>NERDC 2025 • SS1 – SS3 • Production Ready v1.0.0</p>
+        <p>NERDC 2025 • SS1 – SS3 • v1.1.1</p>
 
         <div class="card">
             <h2>Get a Lesson Note</h2>
@@ -111,14 +109,7 @@ async def home():
                 <li><a href="/docs">API Documentation (Swagger)</a></li>
                 <li><a href="/topics">List all topics</a></li>
                 <li><a href="/health">Health Check</a></li>
-                <li><a href="/lesson/SS2/Second%20Term/2">Example: SS2 Second Term Week 2 (Python)</a></li>
             </ul>
-        </div>
-
-        <div class="card">
-            <h2>CLI / End-to-End Handwriting</h2>
-            <p>For personal handwriting font + Classmate PDF:</p>
-            <code>python scripts/end_to_end_pipeline.py --sample your_sample.jpg --class SS2 --term "Second Term" --week 2</code>
         </div>
     </body>
     </html>
@@ -228,7 +219,7 @@ def export_handwriting_pdf(
     week: int = Form(...),
     sample: UploadFile = File(...)
 ):
-    """Run the existing handwriting → font → PDF pipeline for a browser upload."""
+    """Handwriting photo → font → notebook PDF. Accepts ordinary teacher samples."""
     lesson = get_lesson(class_level, term, week)
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found in the curriculum.")
@@ -267,10 +258,10 @@ def export_handwriting_pdf(
             expected_chars=DEFAULT_SAMPLE_ORDER,
             save_debug=False
         )
-        if len(glyphs) < 20:
+        if len(glyphs) < 8:
             raise HTTPException(
                 status_code=422,
-                detail="We found too few characters. Upload a clear photo of the complete handwriting sample sheet."
+                detail="We found too few clear characters. Write letters clearly with a little space between them and try again."
             )
 
         unique_font_name = f"TeacherHandwriting_{uuid.uuid4().hex[:12]}"
@@ -280,7 +271,10 @@ def export_handwriting_pdf(
             family_name=unique_font_name
         )
         if not font_path or not Path(font_path).is_file():
-            raise HTTPException(status_code=422, detail="We couldn't build a handwriting font from this sample. Please check the sample sheet and try again.")
+            raise HTTPException(
+                status_code=422,
+                detail="We could not build a font from this photo. Try a clearer image with dark ink on light paper."
+            )
 
         note_text = build_lesson_payload(class_level, term, week)["lesson_note"]
         pdf_path = ClassmatePDFExporter(
@@ -305,12 +299,16 @@ def export_handwriting_pdf(
         if temp_dir:
             shutil.rmtree(temp_dir, ignore_errors=True)
         raise
+    except (HandwritingSampleError, FontCompilationError) as exc:
+        if temp_dir:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        raise HTTPException(status_code=422, detail=str(exc))
     except Exception:
         if temp_dir:
             shutil.rmtree(temp_dir, ignore_errors=True)
         raise HTTPException(
             status_code=422,
-            detail="We couldn't process this sample. Check that it is a clear, complete handwriting sheet and try again."
+            detail="We could not read enough handwriting in this photo. Try a clearer image with dark ink on light paper."
         )
     finally:
         sample.file.close()
