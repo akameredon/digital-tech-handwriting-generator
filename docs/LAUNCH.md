@@ -1,39 +1,26 @@
-# Launch checklist — D.Lesson Studio v1.1.0
+# Release readiness — v1.1.2
 
-## Pre-flight (local or CI)
+## Current status: not production-ready
+
+The current build provides curriculum browsing, prepared notes where the metadata agrees with the encoded curriculum, curriculum outlines, prompts for external AI tools, and standard ruled printable PDFs. Handwriting-to-font export is intentionally unavailable: no handwriting-recognition model or verified text-to-glyph alignment provider is configured. The compatibility endpoint returns `503` instead of creating a misleading font.
+
+Do not describe or deploy this version as a production handwriting service. The UI must continue to describe the limitation until the recognition and alignment gates below are complete.
+
+## Local verification
 
 ```bash
 python -m pytest tests/ -q
-# optional if Node available:
-cd frontend && npm ci && npm run build && cd ..
+cd frontend && npm ci && npm run build
 ```
 
-Docker image builds the frontend itself (see Dockerfile). Render uses Docker.
+The CI workflow additionally builds the Docker image and checks `/health`, `/`, and `/topics` in the running container. A green CI run is necessary but does not prove production readiness.
 
-## Deploy
+## Required before a production release
 
-1. Commit all changes on a branch (e.g. `release/1.1.0`).
-2. Push and open PR → confirm GitHub Actions green.
-3. Merge to `main`.
-4. Render auto-deploys (`render.yaml` → `autoDeployTrigger: checksPass`).
-5. Confirm:
-   - `GET https://d-lesson-studio.onrender.com/health` → version `1.1.0`
-   - Homepage loads teacher flow
-   - Pick SS1 / First Term / Week 1 → note appears
-   - Upload isolated-character sample → PDF downloads
+1. Configure and document a genuine handwritten-text recognition provider without exposing credentials to the browser.
+2. Align recognized text to image regions, validate confidence, and ensure uncertain labels are never silently compiled as confirmed glyphs.
+3. Test representative real teacher pages and report recognition accuracy; test missing-character fallback and PDF layout.
+4. Complete the mobile, keyboard, screen-reader, contrast, and reduced-motion checks in `docs/FRONTEND_IMPLEMENTATION_GATES.md`.
+5. Run a deployment preview with safe test data, verify rollback, record logs and memory/latency behavior, and obtain explicit release approval before production deployment.
 
-## Teacher sample sheet
-
-- In-app tips on the upload step
-- Printable guide: `/sample-sheet-guide.png`
-- Rule: separate characters only; no sentences on the sample page
-
-## Evidence already produced
-
-- Curriculum: prepared notes for instructional weeks
-- Tests: pytest suite under `tests/`
-
-## After launch (day 1)
-
-- Watch Render logs for 422 spikes (bad photos)
-- Collect 2–3 teacher samples; refine heuristics if needed
+Until then, teachers can use the standard printable PDF and the lesson/prompt workflows.

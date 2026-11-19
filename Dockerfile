@@ -1,8 +1,8 @@
 # Build the teacher-facing React application as static assets.
 FROM node:22-alpine AS frontend-build
 WORKDIR /frontend
-COPY frontend/package*.json ./
-RUN npm install
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
@@ -14,7 +14,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsm6 \
     libxext6 \
     libxrender1 \
-    fontforge \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

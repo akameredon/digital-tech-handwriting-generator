@@ -1,15 +1,12 @@
-# How to Prepare Your Handwriting Sample Sheet
+# Legacy handwriting sample sheet — not currently accepted by the web app
 
-For the system to create a personal handwriting font, provide a clear sample of your normal handwriting. The processor uses a fixed six-row template. It rejects incomplete or ambiguous rows rather than shifting labels and assigning the wrong characters.
+**Status:** Handwriting-to-font export is disabled. The current service does not have a genuine handwritten-text recognizer or verified text-to-glyph alignment. Preparing this sheet will not enable handwriting PDF export in the current release. Use the standard printable lesson PDF instead.
 
-## Materials Needed
-- Clean white A4 paper or a Classmate-style exercise book page
-- Blue or black ballpoint pen (avoid pencil or marker)
-- Good lighting and a clear phone camera or scanner
+This page documents the former fixed-sheet experiment and may be useful as a future calibration/evaluation artifact. It must not be presented as a currently supported workflow.
 
-## Required six-row order
+## Experimental six-row order
 
-Write exactly one character per position, left to right, keeping each row separate:
+If the fixed-sheet experiment is used for offline research, write one isolated character per position, left to right, keeping each row separate:
 
 **Row 1 — uppercase A–M**
 `A B C D E F G H I J K L M`
@@ -29,15 +26,8 @@ Write exactly one character per position, left to right, keeping each row separa
 **Row 6 — punctuation and symbols**
 `. , ; : ! ? ' " ( ) - + = / *`
 
-Do not add headings, numbers, arrows, annotations or extra handwritten text inside the six sample rows. Leave a clear gap between characters and a larger gap between rows. Do not join letters in the sample; the font is built from isolated glyphs.
+Do not add headings, arrows, annotations, or extra text inside the character rows. This ordering alone does not prove the system has identified a character correctly. Any future implementation must validate segmentation and label alignment before compiling or exporting a font.
 
-## Capture requirements
-1. Use one character per position; do not skip, repeat or reorder any character.
-2. Keep the character size reasonably consistent and write naturally.
-3. Avoid ruled lines if possible. If using a notebook, ensure lines do not cross the characters.
-4. Photograph from directly above, with even lighting and no shadows or perspective distortion.
-5. Ensure all six rows and every character are sharp and fully visible.
-6. Upload a JPG or PNG no larger than 8 MB.
+## Capture notes for future evaluation
 
-## Important limitation
-This six-row process creates a font from isolated handwritten characters. It preserves their shapes and proportions, but it does not reproduce connected cursive ligatures or the natural joining between letters in a handwritten paragraph. Cursive reproduction requires a separate stroke/word-level handwriting model and must not be advertised as supported by this glyph-font pipeline.
+Use a sharp, evenly lit, directly overhead image with all rows visible. Record the writer's intended character sequence separately so recognition/alignment can be compared with human ground truth. A clear image by itself is not evidence that automatic recognition is correct.

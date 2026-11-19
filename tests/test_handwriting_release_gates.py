@@ -53,3 +53,17 @@ def test_pdf_export_creates_nonempty_document(tmp_path):
         tmp_path / "lesson.pdf",
     )
     assert path.is_file() and path.stat().st_size > 500
+
+
+def test_legacy_cli_refuses_handwriting_samples(capsys):
+    from scripts.end_to_end_pipeline import main as pipeline_main
+
+    result = pipeline_main([
+        "--sample", "does-not-need-to-exist.png",
+        "--class", "SS2",
+        "--term", "Second Term",
+        "--week", "2",
+    ])
+    captured = capsys.readouterr()
+    assert result == 2
+    assert "Handwriting-to-font export is disabled" in captured.err

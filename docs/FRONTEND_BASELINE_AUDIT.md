@@ -6,6 +6,8 @@
 **Baseline commit inspected:** `f531207df799731930917a7beb0c9096145fed76`  
 **Scope:** Read-only architecture and source inspection. No production code or curriculum files changed.
 
+> This is a historical snapshot of the stated baseline commit, not a description of the current v1.1.2 code. See the repository README and current release notes for present behavior.
+
 ## Executive finding
 
 The repository is a Python-first application. It does not currently contain a dedicated React/Vue/Svelte frontend, JavaScript package manifest, frontend build configuration, or static frontend directory. The current homepage is HTML generated inside the FastAPI `main.py`.
@@ -102,4 +104,3 @@ Gate 1 is complete and the Gate 2 design specification is recorded in `docs/TEAC
 The initial full dependency audit found a high-severity advisory for the transitive `picomatch` dependency used by Vite's build tooling (GHSA-fc5q-39xc-vjpf / CVE-2026-112366). The advisory describes a ReDoS pattern and currently lists picomatch releases through 4.0.7 as affected; the public advisory does not list a patched release. Upstream discussion disputes whether the reported behavior constitutes a vulnerability in normal usage. See the [GitHub advisory](https://github.com/advisories/GHSA-fc5q-39xc-vjpf).
 
 The affected dependency is in the frontend **development/build toolchain**, not the browser runtime bundle. The Docker build copies only the compiled static assets into the Python runtime image; it does not copy Node.js, Vite, or `node_modules`. The build does not accept untrusted glob patterns. We therefore keep the supported Vite 7 toolchain, report all build-time advisories in CI, and enforce `npm audit --omit=dev --audit-level=high` for shipped frontend dependencies. We will revisit the exception when upstream publishes a patched picomatch release or the dependency path changes. We do not force a major downgrade solely to silence the advisory.
-

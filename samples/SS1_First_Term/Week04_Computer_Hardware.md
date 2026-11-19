@@ -1,7 +1,7 @@
 **Class:** SS1  
-**Term:** First Term  
-**Week:** 5  
-**Topic:** Computer Hardware II – Storage Devices and Input/Output Devices
+**Term:** First Term
+**Week:** 4
+**Topic:** Computer Hardware – Storage Devices and Input/Output Devices
 
 ---
 
