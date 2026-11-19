@@ -7,6 +7,8 @@ from io import BytesIO
 from pathlib import Path
 import shutil
 import tempfile
+import logging
+import traceback
 import threading
 import uuid
 from typing import Optional
@@ -21,11 +23,11 @@ from starlette.background import BackgroundTask
 from curriculum.nerdc_schemes import get_lesson, list_all_topics
 from curriculum.prompt_engine import build_prompt
 from curriculum.validator import is_exam_or_break_week
-from ingestion.preprocessor import DEFAULT_SAMPLE_ORDER, HandwritingPreprocessor
+from ingestion.open_handwriting import (\n    OpenHandwritingIntake, ConfiguredRecognizer, RecognitionUnavailable, HandwritingIntakeError\n)
 from model.font_compiler import FontCompiler
 from renderer.pdf_exporter import ClassmatePDFExporter
 
-app = FastAPI(
+logger = logging.getLogger(__name__)\n\napp = FastAPI(
     title="Digital Technologies Lesson Note Generator",
     description="NERDC 2025 aligned lesson notes for SS1-SS3 Digital Technologies",
     version="1.0.0"
@@ -261,17 +263,21 @@ def export_handwriting_pdf(
         image_path = temp_dir / ALLOWED_IMAGE_TYPES[sample.content_type]
         image_path.write_bytes(file_bytes)
 
-        preprocessor = HandwritingPreprocessor()
-        glyphs = preprocessor.process(
-            image_path,
-            expected_chars=DEFAULT_SAMPLE_ORDER,
-            save_debug=False
+        analysis = OpenHandwritingIntake().analyze(image_path)
+        recognizer = ConfiguredRecognizer()
+        try:
+            recognized_lines = recognizer.recognize(analysis)
+        except RecognitionUnavailable as exc:
+            logger.info("Natural handwriting accepted; HTR provider unavailable")
+            raise HTTPException(status_code=503, detail=str(exc))
+
+        # Glyph-to-character alignment must be supplied by a recognizer that
+        # provides defensible character boxes or by teacher correction. Never
+        # map glyphs from their x-position or assume a fixed alphabet order.
+        raise HTTPException(
+            status_code=503,
+            detail="Your handwriting page was accepted and analyzed, but personalized font compilation is waiting for character-level recognition and review."
         )
-        if len(glyphs) < 20:
-            raise HTTPException(
-                status_code=422,
-                detail="We found too few characters. Upload a clear photo of the complete handwriting sample sheet."
-            )
 
         unique_font_name = f"TeacherHandwriting_{uuid.uuid4().hex[:12]}"
         font_path = FontCompiler().compile(
