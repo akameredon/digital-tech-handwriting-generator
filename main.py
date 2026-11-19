@@ -252,6 +252,7 @@ def export_handwriting_pdf(
         image_path = temp_dir / ALLOWED_IMAGE_TYPES[sample.content_type]
         image_path.write_bytes(file_bytes)
 
+        # Open path: accept ordinary photos (no exact six-row template required).
         preprocessor = HandwritingPreprocessor()
         glyphs = preprocessor.process(
             image_path,

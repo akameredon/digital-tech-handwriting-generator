@@ -258,13 +258,13 @@ function App() {
               {lesson && (
                 <section className="panel export-panel">
                   <div className="panel-heading">
-                    <div><span className="step-kicker">STEP 03</span><h2>Make it look handwritten</h2><p>Use your handwriting sample to format the selected lesson content as a Classmate-style PDF.</p>{lesson.content_status === "outline" && <p className="export-note">This PDF will contain the curriculum outline currently available, not an expanded lesson note.</p>}</div>
+                    <div><span className="step-kicker">STEP 03</span><h2>Make it look handwritten</h2><p>Upload a natural sample of your handwriting. No fixed worksheet or character order is required.</p>{lesson.content_status === "outline" && <p className="export-note">This PDF will contain the curriculum outline currently available, not an expanded lesson note.</p>}</div>
                     <span className="panel-icon">03</span>
                   </div>
                   <UploadBox sample={sample} preview={samplePreview} onChange={setSample} />
-                  <p className="sample-help">Need help preparing your handwriting sheet? <a href="https://github.com/akameredon/digital-tech-handwriting-generator/blob/feat/teacher-first-frontend/docs/SAMPLE_SHEET_INSTRUCTIONS.md" target="_blank" rel="noreferrer">Read the sample sheet instructions</a>.</p>
+                  <p className="sample-help">You can use a notebook page, exercise-book page, or ordinary handwritten notes.</p>
                   <div className="panel-actions">
-                    <span className="helper-text">JPG or PNG · Up to 8 MB · Use the complete sample sheet.</span>
+                    <span className="helper-text">JPG or PNG · Up to 8 MB · Any clear handwritten page.</span>
                     <button className="button button-primary" onClick={createPdf} disabled={!sample || exporting}>
                       {exporting ? "Preparing your PDF…" : "Create handwriting PDF"} <span aria-hidden="true">→</span>
                     </button>
@@ -302,11 +302,11 @@ function App() {
               <section className="panel">
                 <div className="panel-heading"><div><span className="step-kicker">HOW IT WORKS</span><h2>Three simple steps</h2><p>The existing handwriting engine does the processing behind the scenes.</p></div></div>
                 <div className="how-grid">
-                  <HowCard number="01" title="Prepare your sample" body="Write clearly on the complete handwriting sample sheet and take a well-lit, straight photo." />
+                  <HowCard number="01" title="Prepare your sample" body="Write naturally on a notebook or paper page and take a clear, well-lit photo." />
                   <HowCard number="02" title="Upload your image" body="Choose a JPG or PNG image. You can preview it and replace it before processing." />
-                  <HowCard number="03" title="Download your PDF" body="The server extracts the glyphs, compiles the font and renders your selected lesson." />
+                  <HowCard number="03" title="Download your PDF" body="The server analyzes your handwriting and, when recognition is available, builds a personalized font for your selected lesson." />
                 </div>
-                <div className="callout"><strong>Good results start with a clear sample.</strong><p>Keep the whole sheet in frame, avoid shadows and blur, and make sure the writing is dark enough to read.</p></div>
+                <div className="callout"><strong>Good results start with a clear sample.</strong><p>Keep the page in frame, avoid shadows and blur, and make sure the writing is dark enough to read.</p></div>
                 <button className="button button-primary" onClick={() => changeSection("create")}>Start a lesson <span aria-hidden="true">→</span></button>
               </section>
             </>
@@ -318,7 +318,7 @@ function App() {
               <section className="panel help-list">
                 <HelpItem title="How do I find my topic?" body="Choose your class, term and week. The curriculum topic and its content summary appear automatically." />
                 <HelpItem title="Why does my lesson say “Curriculum outline”?" body="A full prepared lesson note is not available for every week yet. You can copy a curriculum-aligned prompt and use it in your preferred AI tool." />
-                <HelpItem title="What handwriting image should I upload?" body="Use a clear JPG or PNG photo of the complete handwriting sample sheet. Avoid blur, shadows and cropped edges." />
+                <HelpItem title="What handwriting image should I upload?" body="Use any clear JPG or PNG photo of your ordinary handwriting. Avoid blur, shadows and cropped edges; no fixed template is required." />
                 <HelpItem title="Where does my PDF go?" body="Your browser downloads the finished PDF to its normal downloads location. The app does not store your uploaded sample as a permanent file." />
               </section>
             </>
