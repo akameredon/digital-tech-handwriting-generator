@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: d-lesson-studio
+    runtime: docker
+    plan: free
+    region: ohio
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
