@@ -95,9 +95,50 @@ class HandwritingPreprocessor:
         items = []
         for i in range(1, count):
             x, y, w, h, area = map(int, stats[i])
-            if self.min_contour_area <= area <= self.max_contour_area and h >= 5 and w >= 2:
+            if self.min_contour_area <= area <= self.max_contour_area and h >= 3 and w >= 1:
                 items.append((x, y, w, h, area))
-        return sorted(items, key=lambda item: item[0])
+        if not items:
+            return []
+        # Group detached parts belonging to one symbol (e.g. quotation marks,
+        # colon/semicolon dots and the two strokes of '='). The threshold is
+        # tied to glyph height, not a fixed pixel band; neighbouring characters
+        # remain separate because their horizontal centres are much farther apart.
+        median_h = max(6.0, float(np.median([item[3] for item in items])))
+        x_limit, y_limit = median_h * 0.75, median_h * 0.85
+        parent = list(range(len(items)))
+
+        def root(index):
+            while parent[index] != index:
+                parent[index] = parent[parent[index]]
+                index = parent[index]
+            return index
+
+        for i, a in enumerate(items):
+            ax, ay, aw, ah, _ = a
+            acx, acy = ax + aw / 2, ay + ah / 2
+            for j in range(i + 1, len(items)):
+                bx, by, bw, bh, _ = items[j]
+                bcx, bcy = bx + bw / 2, by + bh / 2
+                x_overlap = min(ax + aw, bx + bw) - max(ax, bx)
+                y_overlap = min(ay + ah, by + bh) - max(ay, by)
+                vertically_related = y_overlap >= 0 or abs(acy - bcy) <= y_limit
+                horizontally_related = x_overlap >= 0 or abs(acx - bcx) <= x_limit
+                if vertically_related and horizontally_related:
+                    ri, rj = root(i), root(j)
+                    if ri != rj:
+                        parent[rj] = ri
+
+        groups = {}
+        for index, item in enumerate(items):
+            groups.setdefault(root(index), []).append(item)
+        combined = []
+        for parts in groups.values():
+            x0 = min(p[0] for p in parts)
+            y0 = min(p[1] for p in parts)
+            x1 = max(p[0] + p[2] for p in parts)
+            y1 = max(p[1] + p[3] for p in parts)
+            combined.append((x0, y0, x1-x0, y1-y0, sum(p[4] for p in parts)))
+        return sorted(combined, key=lambda item: item[0])
 
     def extract_glyphs(self, binary: np.ndarray,
                        expected_order: Optional[Sequence[str]] = None) -> List[Dict]:
