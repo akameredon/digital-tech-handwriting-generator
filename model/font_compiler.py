@@ -103,13 +103,11 @@ class FontCompiler:
             raise FontCompilationError("No confirmed handwriting samples were supplied.")
 
         by_label: Dict[str, Dict] = {}
-        rejected = 0
         for glyph in glyphs:
             label = str(glyph.get("label", ""))
             if len(label) != 1 or not glyph.get("confirmed", False):
-                rejected += 1
                 continue
-            if glyph.get("provenance") not in {"teacher_corrected", "teacher_drawn", "recognizer"}:
+            if glyph.get("provenance") not in {"teacher_corrected", "teacher_drawn"}:
                 rejected += 1
                 continue
             image = glyph.get("image")
