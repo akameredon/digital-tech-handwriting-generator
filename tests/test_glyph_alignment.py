@@ -20,6 +20,8 @@ def test_character_boxes_are_bound_to_recognized_text_not_guessed():
     assert [item.char for item in result] == ["A", "B"]
     assert [item.confirmed for item in result] == [False, False]
     assert result[0].image.shape == (16, 10)
+    assert np.count_nonzero(result[0].image) > 0
+    assert np.count_nonzero(result[0].image) < result[0].image.size
 
 
 def test_box_count_mismatch_is_rejected_not_evenly_split():
