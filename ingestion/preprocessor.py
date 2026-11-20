@@ -75,7 +75,9 @@ class HandwritingPreprocessor:
         return items
 
     def extract_glyphs(self, binary: np.ndarray, expected_order: Optional[Sequence[str]] = None) -> List[Dict]:
-        labels = list(expected_order) if expected_order is not None else list(DEFAULT_SAMPLE_ORDER)
+        # expected_order is retained for call compatibility only. Position is
+        # never evidence of Unicode identity; this extractor returns unlabeled
+        # image regions for later recognition/review.
         components = self._components(binary)
         if not components:
             h = binary.shape[0]
@@ -96,21 +98,17 @@ class HandwritingPreprocessor:
                     best = band
             components = best
         glyphs = []
-        seen = set()
-        for index, (x, y, w, h, area) in enumerate(components):
-            if len(glyphs) >= max(len(labels), 40):
+        for x, y, w, h, area in components:
+            if len(glyphs) >= 300:
                 break
-            label = labels[len(glyphs)] if len(glyphs) < len(labels) else None
-            if label is None or label in seen:
-                continue
             x1, y1 = max(0, x - self.padding), max(0, y - self.padding)
             x2, y2 = min(binary.shape[1], x + w + self.padding), min(binary.shape[0], y + h + self.padding)
             crop = binary[y1:y2, x1:x2].copy()
             if crop.size == 0 or np.count_nonzero(crop) < 6:
                 continue
-            seen.add(label)
-            glyphs.append({"index": len(glyphs), "label": label, "image": crop,
-                           "bbox": (x, y, w, h), "area": area, "row": 1, "column": len(glyphs) + 1})
+            glyphs.append({"index": len(glyphs), "label": None, "image": crop,
+                           "bbox": (x, y, w, h), "area": area, "row": 1, "column": len(glyphs) + 1,
+                           "confirmed": False, "provenance": "unlabeled_component"})
         if len(glyphs) < 8:
             raise HandwritingSampleError(
                 "Too few clear characters were detected. Write letters more clearly and try again."
@@ -126,6 +124,6 @@ class HandwritingPreprocessor:
             target = Path(debug_dir)
             target.mkdir(parents=True, exist_ok=True)
             for g in glyphs:
-                safe = str(g["label"]).replace("/", "slash")
-                cv2.imwrite(str(target / f"{g['index']:03d}_{safe}.png"), g["image"])
+                x, y, w, h = g["bbox"]
+                cv2.imwrite(str(target / f"{g['index']:03d}_x{x}_y{y}_w{w}_h{h}.png"), g["image"])
         return glyphs
