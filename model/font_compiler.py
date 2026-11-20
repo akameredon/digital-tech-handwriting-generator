@@ -108,7 +108,6 @@ class FontCompiler:
             if len(label) != 1 or not glyph.get("confirmed", False):
                 continue
             if glyph.get("provenance") not in {"teacher_corrected", "teacher_drawn"}:
-                rejected += 1
                 continue
             image = glyph.get("image")
             if image is None or not isinstance(image, np.ndarray) or image.size == 0:
