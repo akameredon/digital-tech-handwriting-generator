@@ -89,14 +89,6 @@ class HandwritingPreprocessor:
             raise HandwritingSampleError(
                 "No handwriting characters were found. Use a clearer photo with dark ink on light paper."
             )
-        if len(components) > len(labels) * 1.6:
-            h = binary.shape[0]
-            best = components
-            for frac in (0.40, 0.50, 0.55, 0.60, 0.70):
-                band = self._components(binary[: max(40, int(h * frac)), :])
-                if band and abs(len(band) - len(labels)) < abs(len(best) - len(labels)):
-                    best = band
-            components = best
         glyphs = []
         for x, y, w, h, area in components:
             if len(glyphs) >= 300:
