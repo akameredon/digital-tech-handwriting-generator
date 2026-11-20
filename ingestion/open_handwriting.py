@@ -49,11 +49,11 @@ class PageAnalysis:
 
 
 class HandwritingRecognizer(Protocol):
-    """Adapter contract for a genuine handwritten-text recognition model."""
+    """Adapter contract for genuine HTR with optional character-level geometry."""
     name: str
 
     def recognize_lines(self, lines: Sequence[np.ndarray]) -> List[Dict[str, Any]]:
-        """Return one {text, confidence} result per line crop."""
+        """Return text, confidence, and (when supported) per-character boxes."""
 
 
 class RecognitionUnavailable(RuntimeError):
@@ -170,9 +170,23 @@ class ConfiguredRecognizer:
         for line, result in zip(analysis.lines, results):
             text = str(result.get("text", ""))
             confidence = float(result.get("confidence", 0.0))
+            visible_count = len([char for char in text if not char.isspace()])
+            raw_boxes = result.get("char_boxes", [])
+            raw_char_confidences = result.get("char_confidences", [])
+            # Character geometry is accepted only when every visible character
+            # has a matching model-supplied region. No equal-width guesswork.
+            char_boxes = raw_boxes if len(raw_boxes) == visible_count else []
+            char_confidences = (
+                raw_char_confidences
+                if char_boxes and len(raw_char_confidences) == visible_count
+                else ([0.0] * visible_count if char_boxes else [])
+            )
             normalized.append({
                 "line_index": line.index, "bbox": list(line.bbox),
                 "text": text, "confidence": max(0.0, min(1.0, confidence)),
-                "needs_review": confidence < 0.85,
+                "char_boxes": char_boxes,
+                "char_confidences": char_confidences,
+                "provider": str(result.get("provider", getattr(self.provider, "name", "unknown"))),
+                "needs_review": confidence < 0.85 or not char_boxes,
             })
         return normalized
