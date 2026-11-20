@@ -10,10 +10,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Sequence, Tuple
 
+import cv2
 import numpy as np
 
 BBox = Tuple[int, int, int, int]
-AUTO_CONFIRM_CONFIDENCE = 0.98
 
 
 class GlyphAlignmentError(ValueError):
@@ -82,6 +82,12 @@ def align_character_boxes(
         if not 0.0 <= confidence <= 1.0:
             raise GlyphAlignmentError(f"Character confidence {index + 1} is outside [0, 1].")
         crop = line_image[y:y + box_height, x:x + box_width].copy()
+        # FontCompiler expects white ink on a black background. Natural page
+        # crops are usually dark ink on white paper; normalize without changing
+        # the original line/page image used for transcription review.
+        gray_crop = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY) if crop.ndim == 3 else crop
+        threshold_mode = cv2.THRESH_BINARY_INV if float(np.mean(gray_crop)) > 127 else cv2.THRESH_BINARY
+        crop = cv2.threshold(gray_crop, 0, 255, threshold_mode + cv2.THRESH_OTSU)[1]
         confirmed = bool(teacher_confirmed)
         observations.append(CharacterObservation(
             char=char,
