@@ -92,3 +92,16 @@ Return specific 4xx errors only for genuinely unreadable/unsupported uploads. Lo
 ## Explicit non-goal
 
 Do not make a rigid template the required way to use D.Lesson Studio. An optional calibration worksheet may improve coverage, but ordinary handwriting must remain the primary supported input.
+
+
+## Implementation progress — production handwriting branch
+
+The production-handwriting branch adds a strict evidence boundary between recognition and font compilation:
+
+- `ingestion/preprocessor.py` now returns unlabeled image components. Its legacy `expected_order` argument is retained only for compatibility and is not used to assign Unicode characters.
+- `ingestion/glyph_alignment.py` accepts provider-supplied character boxes, checks that the number of boxes exactly matches the visible characters in the reviewed transcription, and rejects missing or out-of-bounds boxes. It never invents equal-width boxes or maps by position.
+- Low-confidence recognition observations remain unconfirmed. A teacher correction confirms only the selected character and preserves its original image crop and coordinates.
+- `model/font_compiler.py` now compiles only explicitly confirmed, source-backed glyphs. It no longer inserts teacher-attributed rectangle placeholders for missing characters.
+- `renderer/pdf_exporter.py` now allows a partial font and uses Helvetica for characters absent from its cmap.
+
+This is a safety and font-integrity milestone, not a completed handwriting feature. There is still no configured HTR model that recognizes ordinary teacher handwriting and supplies trustworthy character-level boxes. The web handwriting export remains disabled until that provider, review experience, real-photo evaluation, and mobile end-to-end tests are complete.
