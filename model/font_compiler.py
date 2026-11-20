@@ -17,7 +17,7 @@ try:
 except ImportError:
     FONTTOOLS_AVAILABLE = False
 
-PREFERRED_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,;:!?'\\"()-+=/*"
+PREFERRED_CHARS = ("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789" + ".,;:!?'\\" + '"()-+=/*')
 
 
 class FontCompilationError(ValueError):
@@ -111,7 +111,6 @@ class FontCompiler:
                 continue
             image = glyph.get("image")
             if image is None or not isinstance(image, np.ndarray) or image.size == 0:
-                rejected += 1
                 continue
             by_label.setdefault(label, glyph)
 
