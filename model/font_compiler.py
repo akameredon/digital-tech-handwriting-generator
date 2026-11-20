@@ -125,28 +125,27 @@ class FontCompiler:
 
         chars = [char for char in PREFERRED_CHARS if char in by_label]
         chars.extend(sorted(char for char in by_label if char not in PREFERRED_CHARS))
-        glyph_order = [".notdef"] + [self._glyph_name(char) for char in chars]
-        cmap = {ord(char): self._glyph_name(char) for char in chars}
-        builder = FontBuilder(self.units_per_em, isTTF=True)
-        builder.setupGlyphOrder(glyph_order)
-        builder.setupCharacterMap(cmap)
-
         glyf = {".notdef": self._notdef_glyph()}
         metrics = {".notdef": (550, 50)}
+        compiled_chars: List[str] = []
         for char in chars:
             name = self._glyph_name(char)
             item = by_label[char]
             row = int(item.get("row", 1))
             try:
                 glyf[name] = self._image_to_glyph(item["image"], name, row, metrics)
+                compiled_chars.append(char)
             except FontCompilationError as exc:
                 logger.warning("Skipping unusable confirmed glyph %r: %s", char, exc)
-        if len(metrics) - 1 < 8:
+        if len(compiled_chars) < 8:
             raise FontCompilationError("Fewer than 8 confirmed glyphs had usable outlines.")
 
-        # cmap contains only characters whose teacher-provided outlines compiled.
-        compiled_names = set(glyf)
-        cmap = {codepoint: name for codepoint, name in cmap.items() if name in compiled_names}
+        # Both glyph order and cmap contain only teacher-provided outlines
+        # that successfully compiled; missing or rejected characters stay absent.
+        glyph_order = [".notdef"] + [self._glyph_name(char) for char in compiled_chars]
+        cmap = {ord(char): self._glyph_name(char) for char in compiled_chars}
+        builder = FontBuilder(self.units_per_em, isTTF=True)
+        builder.setupGlyphOrder(glyph_order)
         builder.setupCharacterMap(cmap)
         builder.setupGlyf(glyf)
         builder.setupHorizontalMetrics(metrics)
