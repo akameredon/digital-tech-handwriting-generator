@@ -107,3 +107,13 @@ def test_pdf_exporter_accepts_partial_font_and_uses_fallback(tmp_path):
     exporter = ClassmatePDFExporter(font_path=str(font_path))
     pdf_path = exporter.export_lesson("ABCDEFGH — missing characters use standard fallback.", output)
     assert pdf_path.is_file() and pdf_path.stat().st_size > 500
+
+
+def test_recognizer_output_alone_cannot_be_compiled_as_confirmed_font(tmp_path):
+    unreviewed = [
+        {"label": char, "image": np.pad(np.ones((16, 8), dtype=np.uint8) * 255, 2),
+         "row": 1, "confirmed": True, "provenance": "recognizer"}
+        for char in "ABCDEFGH"
+    ]
+    with pytest.raises(FontCompilationError):
+        FontCompiler().compile(unreviewed, tmp_path / "unreviewed.ttf")
