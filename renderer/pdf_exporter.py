@@ -58,12 +58,6 @@ class ClassmatePDFExporter:
             with FontToolsTTFont(str(font_path), checkChecksums=2) as parsed:
                 cmap = parsed.getBestCmap() or {}
                 self.custom_supported = {chr(codepoint) for codepoint in cmap}
-            missing_core = REQUIRED_TEXT_CHARS - self.custom_supported
-            if missing_core:
-                raise ValueError(
-                    "Handwriting font is missing required letters or digits: "
-                    + "".join(sorted(missing_core))
-                )
             pdfmetrics.registerFont(TTFont(font_name, str(font_path)))
             self.font_name = font_name
 

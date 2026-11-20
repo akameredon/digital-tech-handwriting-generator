@@ -30,7 +30,8 @@ def test_open_extraction_does_not_require_exact_row_counts():
 
 def test_font_compiler_accepts_partial_glyph_set(tmp_path):
     glyphs = [
-        {"label": char, "image": np.ones((20, 12), dtype=np.uint8) * 255, "row": 1}
+        {"label": char, "image": np.pad(np.ones((16, 8), dtype=np.uint8) * 255, 2), "row": 1,
+         "confirmed": True, "provenance": "teacher_corrected"}
         for char in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     ]
     path = FontCompiler().compile(glyphs, tmp_path / "partial.ttf")
@@ -67,3 +68,52 @@ def test_legacy_cli_refuses_handwriting_samples(capsys):
     captured = capsys.readouterr()
     assert result == 2
     assert "Handwriting-to-font export is disabled" in captured.err
+
+
+
+def test_partial_font_maps_only_confirmed_characters(tmp_path):
+    from fontTools.ttLib import TTFont as ReadFont
+    glyphs = [
+        {"label": char, "image": np.pad(np.ones((16, 8), dtype=np.uint8) * 255, 2),
+         "row": 1, "confirmed": True, "provenance": "teacher_corrected"}
+        for char in "ABCDEFGH"
+    ]
+    path = FontCompiler().compile(glyphs, tmp_path / "confirmed-only.ttf")
+    with ReadFont(str(path)) as font:
+        cmap = font.getBestCmap()
+        assert set(map(chr, cmap)) == set("ABCDEFGH")
+        assert "." not in cmap
+        assert "Z" not in cmap
+
+
+def test_font_compiler_ignores_unconfirmed_or_unlabeled_components(tmp_path):
+    unsafe = [
+        {"label": char, "image": np.pad(np.ones((16, 8), dtype=np.uint8) * 255, 2),
+         "row": 1, "confirmed": False, "provenance": "recognizer"}
+        for char in "ABCDEFGH"
+    ]
+    with pytest.raises(FontCompilationError):
+        FontCompiler().compile(unsafe, tmp_path / "must-not-build.ttf")
+
+
+def test_pdf_exporter_accepts_partial_font_and_uses_fallback(tmp_path):
+    glyphs = [
+        {"label": char, "image": np.pad(np.ones((16, 8), dtype=np.uint8) * 255, 2),
+         "row": 1, "confirmed": True, "provenance": "teacher_corrected"}
+        for char in "ABCDEFGH"
+    ]
+    font_path = FontCompiler().compile(glyphs, tmp_path / "partial.ttf")
+    output = tmp_path / "mixed-font.pdf"
+    exporter = ClassmatePDFExporter(font_path=str(font_path))
+    pdf_path = exporter.export_lesson("ABCDEFGH — missing characters use standard fallback.", output)
+    assert pdf_path.is_file() and pdf_path.stat().st_size > 500
+
+
+def test_recognizer_output_alone_cannot_be_compiled_as_confirmed_font(tmp_path):
+    unreviewed = [
+        {"label": char, "image": np.pad(np.ones((16, 8), dtype=np.uint8) * 255, 2),
+         "row": 1, "confirmed": True, "provenance": "recognizer"}
+        for char in "ABCDEFGH"
+    ]
+    with pytest.raises(FontCompilationError):
+        FontCompiler().compile(unreviewed, tmp_path / "unreviewed.ttf")
