@@ -244,18 +244,48 @@ class OpenHandwritingIntake:
         lines: List[TextLineRegion] = []
         for top, bottom in merged:
             region = binary[top:bottom, :]
-            xs = np.where(np.count_nonzero(region, axis=0) > 0)[0]
+            column_ink = np.count_nonzero(region, axis=0)
+            xs = np.where(column_ink > 0)[0]
             if len(xs) == 0:
                 continue
-            left, right = max(0, int(xs[0]) - 8), min(width, int(xs[-1]) + 9)
+            # A wide, sustained vertical gutter indicates independent columns;
+            # ordinary word spaces are kept together as one reading line.
+            active_columns = column_ink > 0
+            gaps = []
+            gap_start = None
+            for x, active in enumerate(active_columns):
+                if not active and gap_start is None:
+                    gap_start = x
+                elif active and gap_start is not None:
+                    if x - gap_start >= max(45, int(width * 0.07)):
+                        gaps.append((gap_start, x))
+                    gap_start = None
+            if gap_start is not None and width - gap_start >= max(45, int(width * 0.07)):
+                gaps.append((gap_start, width))
+            segments = []
+            segment_start = int(xs[0])
+            for gap_left, gap_right in gaps:
+                if gap_left - segment_start >= int(width * 0.12):
+                    segments.append((segment_start, gap_left))
+                segment_start = gap_right
+            if int(xs[-1]) + 1 - segment_start >= int(width * 0.12):
+                segments.append((segment_start, int(xs[-1]) + 1))
+            if not segments:
+                segments = [(int(xs[0]), int(xs[-1]) + 1)]
             pad_y = max(4, int((bottom - top) * 0.12))
             y0, y1 = max(0, top - pad_y), min(height, bottom + pad_y)
-            crop = gray[y0:y1, left:right].copy()
-            line_ink = int(cv2.countNonZero(binary[y0:y1, left:right]))
-            area = max(1, crop.shape[0] * crop.shape[1])
-            lines.append(TextLineRegion(
-                len(lines), (left, y0, right - left, y1 - y0), crop, line_ink / area
-            ))
+            for segment_left, segment_right in segments:
+                local_xs = np.where(column_ink[segment_left:segment_right] > 0)[0]
+                if len(local_xs) == 0:
+                    continue
+                left = max(0, segment_left + int(local_xs[0]) - 8)
+                right = min(width, segment_left + int(local_xs[-1]) + 9)
+                crop = gray[y0:y1, left:right].copy()
+                line_ink = int(cv2.countNonZero(binary[y0:y1, left:right]))
+                area = max(1, crop.shape[0] * crop.shape[1])
+                lines.append(TextLineRegion(
+                    len(lines), (left, y0, right - left, y1 - y0), crop, line_ink / area
+                ))
 
         if not lines:
             raise HandwritingIntakeError("We could not detect handwriting lines in this image.")
