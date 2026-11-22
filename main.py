@@ -296,12 +296,16 @@ async def analyze_natural_handwriting_page(page: UploadFile = File(...)):
         analysis = await run_in_threadpool(
             OpenHandwritingIntake().analyze_bytes, image_bytes
         )
-        return {
-            "status": "analyzed",
-            "recognition_status": "not_configured",
-            "message": "The page was analyzed and handwriting lines were detected. Text recognition is not yet configured.",
-            "analysis": analysis.public_dict(),
-        }
+        return JSONResponse(
+            content={
+                "status": "analyzed",
+                "recognition_status": "not_configured",
+                "source_retention": "not_stored",
+                "message": "The page was analyzed and handwriting lines were detected. Text recognition is not yet configured.",
+                "analysis": analysis.public_dict(),
+            },
+            headers={"Cache-Control": "no-store, max-age=0", "Pragma": "no-cache"},
+        )
     except HandwritingIntakeError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     finally:
