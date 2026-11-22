@@ -55,3 +55,51 @@ def test_rejects_blank_image_with_actionable_error(tmp_path):
         assert "handwriting" in str(exc).lower()
     else:
         raise AssertionError("Blank image should be rejected")
+
+def test_byte_upload_intake_accepts_natural_page(tmp_path):
+    from io import BytesIO
+    from fastapi import UploadFile
+    from main import analyze_natural_handwriting_page
+    path = tmp_path / "natural.png"
+    make_natural_page(path)
+    upload = UploadFile(file=BytesIO(path.read_bytes()), filename="teacher-page.png",
+                        headers={"content-type": "image/png"})
+    response = __import__("asyncio").run(analyze_natural_handwriting_page(upload))
+    assert response["status"] == "analyzed"
+    assert response["recognition_status"] == "not_configured"
+    assert response["analysis"]["line_count"] >= 2
+    assert "blur_score" in response["analysis"]
+
+
+def test_byte_upload_rejects_payload_over_limit():
+    from ingestion.open_handwriting import HandwritingIntakeError, MAX_NATURAL_PAGE_BYTES
+    try:
+        OpenHandwritingIntake().analyze_bytes(b"x" * (MAX_NATURAL_PAGE_BYTES + 1))
+    except HandwritingIntakeError as exc:
+        assert "12 MB" in str(exc)
+    else:
+        raise AssertionError("Oversized upload must be rejected before decoding")
+
+
+def test_byte_upload_rejects_invalid_image():
+    from ingestion.open_handwriting import HandwritingIntakeError
+    try:
+        OpenHandwritingIntake().analyze_bytes(b"not-an-image")
+    except HandwritingIntakeError as exc:
+        assert "valid" in str(exc).lower()
+    else:
+        raise AssertionError("Invalid image bytes must be rejected")
+
+
+def test_upload_api_rejects_unsupported_mime_type():
+    from io import BytesIO
+    from fastapi import UploadFile, HTTPException
+    from main import analyze_natural_handwriting_page
+    upload = UploadFile(file=BytesIO(b"not an image"), filename="page.gif",
+                        headers={"content-type": "image/gif"})
+    try:
+        __import__("asyncio").run(analyze_natural_handwriting_page(upload))
+    except HTTPException as exc:
+        assert exc.status_code == 415
+    else:
+        raise AssertionError("Unsupported MIME type must be rejected")
