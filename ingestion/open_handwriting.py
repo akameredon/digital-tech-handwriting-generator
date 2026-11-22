@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import base64
 import hashlib
 from io import BytesIO
 from pathlib import Path
@@ -41,6 +42,7 @@ class PageAnalysis:
     deskew_degrees: float
     page_corners: Optional[List[List[int]]]
     source_sha256: Optional[str] = None
+    processed_preview: Optional[str] = None
 
     def public_dict(self) -> Dict[str, Any]:
         return {
@@ -53,6 +55,7 @@ class PageAnalysis:
             "deskew_degrees": round(self.deskew_degrees, 2),
             "page_corners": self.page_corners,
             "source_sha256": self.source_sha256,
+            "processed_preview": self.processed_preview,
             "processing": ["exif_orientation", "page_boundary_detection", "perspective_correction_if_confident", "deskew_if_confident", "contrast_normalization", "ruled_line_suppression", "natural_line_and_column_segmentation"],
             "lines": [
                 {"index": line.index, "bbox": list(line.bbox),
@@ -313,7 +316,22 @@ class OpenHandwritingIntake:
         elif brightness > 225:
             warnings.append("The page is overexposed. Reduce glare and retake the photo.")
         quality = "usable" if len(lines) >= 2 and blur_score >= 45 and 55 <= brightness <= 225 else "limited"
-        return PageAnalysis(width, height, quality, warnings, lines, blur_score, brightness,\n                            perspective_corrected, deskew_degrees, page_corners)
+        preview = image.copy()
+        for line in lines:
+            x, y, box_width, box_height = line.bbox
+            cv2.rectangle(preview, (x, y), (x + box_width, y + box_height), (30, 150, 75), 2)
+            cv2.putText(preview, str(line.index + 1), (max(4, x), max(18, y - 5)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (30, 100, 45), 2, cv2.LINE_AA)
+        preview_h, preview_w = preview.shape[:2]
+        if max(preview_h, preview_w) > 1100:
+            scale = 1100 / max(preview_h, preview_w)
+            preview = cv2.resize(preview, (int(preview_w * scale), int(preview_h * scale)),
+                                 interpolation=cv2.INTER_AREA)
+        encoded_ok, encoded_preview = cv2.imencode(".jpg", preview, [cv2.IMWRITE_JPEG_QUALITY, 78])
+        preview_data = "data:image/jpeg;base64," + base64.b64encode(encoded_preview).decode("ascii") if encoded_ok else None
+        return PageAnalysis(width, height, quality, warnings, lines, blur_score, brightness,
+                            perspective_corrected, deskew_degrees, page_corners,
+                            processed_preview=preview_data)
 
 
 class ConfiguredRecognizer:
