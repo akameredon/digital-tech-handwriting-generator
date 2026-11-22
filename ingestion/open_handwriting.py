@@ -36,6 +36,9 @@ class PageAnalysis:
     lines: List[TextLineRegion]
     blur_score: float
     brightness: float
+    perspective_corrected: bool
+    deskew_degrees: float
+    page_corners: Optional[List[List[int]]]
 
     def public_dict(self) -> Dict[str, Any]:
         return {
@@ -44,6 +47,9 @@ class PageAnalysis:
             "line_count": len(self.lines),
             "blur_score": round(self.blur_score, 2),
             "brightness": round(self.brightness, 2),
+            "perspective_corrected": self.perspective_corrected,
+            "deskew_degrees": round(self.deskew_degrees, 2),
+            "page_corners": self.page_corners,
             "lines": [
                 {"index": line.index, "bbox": list(line.bbox),
                  "ink_ratio": round(line.ink_ratio, 4)}
@@ -90,6 +96,8 @@ class OpenHandwritingIntake:
         except (UnidentifiedImageError, OSError, ValueError) as exc:
             raise HandwritingIntakeError("We could not read this image. Choose a valid JPG, PNG or WebP photo.") from exc
         h, w = image.shape[:2]
+        if h * w > 24_000_000:
+            raise HandwritingIntakeError("This image has too many pixels to process safely. Resize it to 24 megapixels or less.")
         if min(h, w) < self.min_dimension:
             raise HandwritingIntakeError("This image is too small. Upload a higher-resolution photo of your handwriting.")
         return image
@@ -109,6 +117,79 @@ class OpenHandwritingIntake:
         rules = cv2.morphologyEx(binary, cv2.MORPH_OPEN, horizontal, iterations=1)
         return cv2.subtract(binary, rules)
 
+    @staticmethod
+    def _order_corners(points: np.ndarray) -> np.ndarray:
+        points = points.astype("float32")
+        total = points.sum(axis=1)
+        diff = np.diff(points, axis=1).reshape(-1)
+        return np.array([
+            points[np.argmin(total)], points[np.argmin(diff)],
+            points[np.argmax(total)], points[np.argmax(diff)]
+        ], dtype="float32")
+
+    def _rectify_page(self, image: np.ndarray) -> Tuple[np.ndarray, bool, Optional[List[List[int]]]]:
+        """Perspective-correct a confidently detected page quadrilateral."""
+        height, width = image.shape[:2]
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        edges = cv2.Canny(cv2.GaussianBlur(gray, (5, 5), 0), 40, 120)
+        contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        candidates = []
+        for contour in sorted(contours, key=cv2.contourArea, reverse=True)[:30]:
+            perimeter = cv2.arcLength(contour, True)
+            if perimeter <= 0:
+                continue
+            polygon = cv2.approxPolyDP(contour, 0.02 * perimeter, True)
+            area_ratio = cv2.contourArea(polygon) / float(width * height)
+            if len(polygon) == 4 and cv2.isContourConvex(polygon) and 0.25 <= area_ratio <= 0.97:
+                pts = polygon.reshape(4, 2)
+                if np.min(pts[:, 0]) <= 2 or np.min(pts[:, 1]) <= 2:
+                    continue
+                if np.max(pts[:, 0]) >= width - 3 or np.max(pts[:, 1]) >= height - 3:
+                    continue
+                candidates.append((area_ratio, pts))
+        if not candidates:
+            return image, False, None
+        _, raw = max(candidates, key=lambda item: item[0])
+        corners = self._order_corners(raw)
+        tl, tr, br, bl = corners
+        out_w = int(max(np.linalg.norm(br - bl), np.linalg.norm(tr - tl)))
+        out_h = int(max(np.linalg.norm(tr - br), np.linalg.norm(tl - bl)))
+        if out_w < self.min_dimension or out_h < self.min_dimension:
+            return image, False, None
+        # Prevent perspective expansion from exceeding the decoded source budget.
+        scale = min(1.0, 5000 / max(out_w, out_h))
+        out_w, out_h = max(1, int(out_w * scale)), max(1, int(out_h * scale))
+        target = np.array([[0, 0], [out_w - 1, 0], [out_w - 1, out_h - 1], [0, out_h - 1]], dtype="float32")
+        transform = cv2.getPerspectiveTransform(corners, target)
+        warped = cv2.warpPerspective(image, transform, (out_w, out_h), flags=cv2.INTER_CUBIC,
+                                     borderMode=cv2.BORDER_REPLICATE)
+        return warped, True, [[int(x), int(y)] for x, y in corners]
+
+    @staticmethod
+    def _deskew(image: np.ndarray) -> Tuple[np.ndarray, float]:
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        edges = cv2.Canny(gray, 50, 150, apertureSize=3)
+        min_length = max(80, int(image.shape[1] * 0.28))
+        segments = cv2.HoughLinesP(edges, 1, np.pi / 1800, threshold=70,
+                                   minLineLength=min_length, maxLineGap=max(12, int(image.shape[1] * 0.025)))
+        if segments is None:
+            return image, 0.0
+        angles = []
+        for x1, y1, x2, y2 in segments[:, 0]:
+            angle = float(np.degrees(np.arctan2(y2 - y1, x2 - x1)))
+            if abs(angle) <= 12:
+                angles.append(angle)
+        if len(angles) < 2:
+            return image, 0.0
+        correction = -float(np.median(angles))
+        if abs(correction) < 0.5 or abs(correction) > 8:
+            return image, 0.0
+        h, w = image.shape[:2]
+        matrix = cv2.getRotationMatrix2D((w / 2, h / 2), correction, 1.0)
+        rotated = cv2.warpAffine(image, matrix, (w, h), flags=cv2.INTER_CUBIC,
+                                 borderMode=cv2.BORDER_REPLICATE)
+        return rotated, correction
+
     def analyze_bytes(self, image_bytes: bytes) -> PageAnalysis:
         image = self.decode(image_bytes)
         return self.analyze_image(image)
@@ -117,6 +198,8 @@ class OpenHandwritingIntake:
         return self.analyze_image(self.load(image_path))
 
     def analyze_image(self, image: np.ndarray) -> PageAnalysis:
+        image, perspective_corrected, page_corners = self._rectify_page(image)
+        image, deskew_degrees = self._deskew(image)
         height, width = image.shape[:2]
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         blur_score = float(cv2.Laplacian(gray, cv2.CV_64F).var())
@@ -188,7 +271,7 @@ class OpenHandwritingIntake:
         elif brightness > 225:
             warnings.append("The page is overexposed. Reduce glare and retake the photo.")
         quality = "usable" if len(lines) >= 2 and blur_score >= 45 and 55 <= brightness <= 225 else "limited"
-        return PageAnalysis(width, height, quality, warnings, lines, blur_score, brightness)
+        return PageAnalysis(width, height, quality, warnings, lines, blur_score, brightness,\n                            perspective_corrected, deskew_degrees, page_corners)
 
 
 class ConfiguredRecognizer:
