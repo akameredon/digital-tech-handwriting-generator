@@ -85,6 +85,7 @@ jobs:
               "/prompt/{class_level}/{term}/{week}": {"get"},
               "/export/lesson-pdf": {"post"},
               "/handwriting/calibration-sheet": {"get"},
+              "/handwriting/analyze": {"post"},
               "/export/handwriting-pdf": {"post"},
           }
           for path, methods in required.items():
