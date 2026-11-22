@@ -26,6 +26,7 @@ from ingestion.calibration_sheet import (
     write_calibration_sheet,
 )
 from ingestion.preprocessor import DEFAULT_SAMPLE_ROWS
+from ingestion.open_handwriting import OpenHandwritingIntake, HandwritingIntakeError
 from model.font_compiler import FontCompilationError, FontCompiler
 from renderer.pdf_exporter import ClassmatePDFExporter
 
@@ -280,6 +281,31 @@ def export_lesson_pdf(
         logger.exception("Printable lesson PDF export failed")
         shutil.rmtree(temp_dir, ignore_errors=True)
         raise HTTPException(status_code=500, detail="The printable PDF could not be created. Please try again.")
+
+
+
+
+@app.post("/handwriting/analyze")
+async def analyze_natural_handwriting_page(page: UploadFile = File(...)):
+    """Inspect a natural notebook page; this endpoint does not claim HTR recognition."""
+    allowed_types = {"image/jpeg", "image/png", "image/webp"}
+    if page.content_type not in allowed_types:
+        raise HTTPException(status_code=415, detail="Upload a JPG, PNG or WebP image.")
+    try:
+        image_bytes = await page.read(12 * 1024 * 1024 + 1)
+        analysis = await run_in_threadpool(
+            OpenHandwritingIntake().analyze_bytes, image_bytes
+        )
+        return {
+            "status": "analyzed",
+            "recognition_status": "not_configured",
+            "message": "The page was analyzed and handwriting lines were detected. Text recognition is not yet configured.",
+            "analysis": analysis.public_dict(),
+        }
+    except HandwritingIntakeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    finally:
+        await page.close()
 
 
 @app.get("/handwriting/calibration-sheet")
