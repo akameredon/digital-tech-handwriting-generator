@@ -4,7 +4,7 @@
 
 A Python/FastAPI lesson-note tool and teacher-facing web interface for Nigerian senior secondary Digital Technologies. It provides curriculum browsing, prepared lesson notes where available, curriculum outlines and prompts for other weeks, and ruled printable PDFs.
 
-> **Readiness note:** this repository is not being presented as production-ready. An experimental handwriting-style PDF path accepts only the generated optional calibration worksheet and requires the teacher to confirm its printed labels. Natural notebook-page recognition and verified model-based text-to-glyph alignment are not implemented. A regular printable PDF remains available without a worksheet.
+> **Readiness note:** the repository now includes a trajectory-based unseen-handwriting generation engine in `renderer/stroke_handwriting.py`. It is not a conventional font wrapper: it composes new text from pen trajectories with writer variation and cursive joins. Teacher-specific identity still requires verified trajectories extracted from real samples; the existing worksheet/PDF path remains separately documented.
 
 ## Quick start
 
@@ -74,6 +74,7 @@ The CI workflow also builds the Docker image and smoke-tests the API. Green unit
 
 - [Teacher guide](docs/TEACHER_GUIDE.md)
 - [Handwriting feature status and architecture](docs/OPEN_HANDWRITING_RECOGNITION.md)
+- [Authentic stroke-handwriting generation](docs/STROKE_HANDWRITING_GENERATION.md)
 - [Optional worksheet instructions](docs/SAMPLE_SHEET_INSTRUCTIONS.md)
 - [HTR research notes and sources](docs/HTR_RESEARCH_NOTES.md)
 - [Launch readiness checklist](docs/LAUNCH.md)
