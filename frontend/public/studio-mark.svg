@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="Digital Technologies Lesson Studio">
+  <rect width="48" height="48" rx="13" fill="#1d315e"/>
+  <path d="M10 10h11.5C31.4 10 38 16 38 24s-6.6 14-16.5 14H10V10zm8 7v14h3.2c5.1 0 8.3-2.4 8.3-7s-3.2-7-8.3-7H18z" fill="#fff"/>
+  <circle cx="35.5" cy="35.5" r="3.25" fill="#8fa9ff"/>
+</svg>
