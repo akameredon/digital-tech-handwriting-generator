@@ -5,6 +5,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import re
 import shutil
 import tempfile
 from typing import Optional
@@ -133,6 +134,34 @@ class SecurityHeadersMiddleware:
         await self.app(scope, receive, secured_send)
 
 
+class RequestIDMiddleware:
+    """Attach a safe correlation ID to every HTTP response."""
+
+    _SAFE_ID = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request_headers = dict(scope.get("headers", []))
+        candidate = request_headers.get(b"x-request-id", b"").decode("ascii", "ignore")
+        request_id = candidate if self._SAFE_ID.fullmatch(candidate) else uuid4().hex[:12]
+
+        async def identified_send(message):
+            if message.get("type") == "http.response.start":
+                headers = list(message.get("headers", []))
+                if not any(name.lower() == b"x-request-id" for name, _ in headers):
+                    headers.append((b"x-request-id", request_id.encode("ascii")))
+                message = {**message, "headers": headers}
+            await send(message)
+
+        await self.app(scope, receive, identified_send)
+
+
 app = FastAPI(
     title="Digital Technologies Lesson Note Generator",
     description="NERDC 2025 aligned lesson notes for SS1-SS3 Digital Technologies",
@@ -140,6 +169,7 @@ app = FastAPI(
 )
 app.add_middleware(HandwritingUploadLimitMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestIDMiddleware)
 
 ROOT_DIR = Path(__file__).parent
 SAMPLES_DIR = ROOT_DIR / "samples"
@@ -155,6 +185,18 @@ if (FRONTEND_DIST / "assets").is_dir():
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "Digital Technologies Lesson Note Generator", "version": "1.1.2"}
+
+
+@app.get("/ready")
+async def readiness():
+    """Expose deployment-safe readiness facts without revealing configuration secrets."""
+    return {
+        "status": "ready",
+        "service": "Digital Technologies Lesson Note Generator",
+        "version": "1.1.2",
+        "frontend_built": (FRONTEND_DIST / "index.html").is_file(),
+        "htr_provider_configured": bool(os.getenv("HTR_PROVIDER")),
+    }
 
 
 @app.get("/", response_class=HTMLResponse)

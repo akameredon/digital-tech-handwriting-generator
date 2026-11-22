@@ -8,9 +8,9 @@ The application is **not yet approved for a public handwriting-recognition launc
 
 ## Verified in this repository
 
-- Backend suite: 99 tests passed locally.
+- Backend suite: 102 tests passed locally.
 - Frontend TypeScript check and production build: passed locally.
-- Local API smoke checks: `/health`, `/`, `/topics`, and standard lesson-PDF export passed; the legacy handwriting export remains explicitly gated.
+- Local API smoke checks: `/health`, `/ready`, `/`, `/topics`, standard lesson-PDF export, and request correlation passed; the legacy handwriting export remains explicitly gated.
 - Natural-page validation infrastructure is committed, deterministic, and includes CER/WER, geometry review-rate, candidate-rate, and real-data gates.
 - Uncertain character geometry is localized for review rather than silently accepted, and Unicode labels are not inferred from positional order.
 - `origin/main` is the source of truth for the completed work.

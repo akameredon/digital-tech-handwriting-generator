@@ -70,6 +70,9 @@ jobs:
           curl -fsS http://127.0.0.1:8000/ | grep -q "Digital Technologies Lesson Studio"
           curl -fsS "http://127.0.0.1:8000/topics?class_level=SS2" >/dev/null
           curl -fsS http://127.0.0.1:8000/health
+          curl -fsS http://127.0.0.1:8000/ready | grep -q '"status":"ready"'
+          curl -fsS -D /tmp/headers.txt -o /dev/null http://127.0.0.1:8000/health
+          grep -iq '^x-request-id:' /tmp/headers.txt
 
       - name: Run complete Python test suite
         run: python -m pytest tests/ -v

@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from starlette.datastructures import UploadFile
 
 from main import (
+    RequestIDMiddleware,
     SecurityHeadersMiddleware,
     analyze_handwriting_page,
     app,
@@ -18,12 +19,14 @@ from main import (
     get_lesson_note,
     get_topics,
     home,
+    readiness,
 )
 
 
 def test_existing_and_new_web_routes_are_available():
     paths = app.openapi()["paths"]
     assert "/health" in paths
+    assert "/ready" in paths
     assert "/topics" in paths
     assert "/lesson/{class_level}/{term}/{week}" in paths
     assert "/prompt/{class_level}/{term}/{week}" in paths
@@ -97,6 +100,34 @@ def test_security_headers_are_added_without_overwriting_existing_headers():
     assert headers[b"x-content-type-options"] == b"nosniff"
     assert headers[b"referrer-policy"] == b"strict-origin-when-cross-origin"
     assert headers[b"permissions-policy"] == b"camera=(), microphone=(), geolocation=()"
+
+
+def test_readiness_reports_non_secret_runtime_facts():
+    report = asyncio.run(readiness())
+    assert report["status"] == "ready"
+    assert isinstance(report["frontend_built"], bool)
+    assert isinstance(report["htr_provider_configured"], bool)
+
+
+def test_request_id_preserves_safe_input_and_replaces_unsafe_input():
+    async def endpoint(scope, receive, send):
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"ok"})
+
+    async def invoke(value):
+        sent = []
+
+        async def capture(message):
+            sent.append(message)
+
+        scope = {"type": "http", "path": "/health", "headers": [(b"x-request-id", value)]}
+        await RequestIDMiddleware(endpoint)(scope, None, capture)
+        return dict(sent[0]["headers"])[b"x-request-id"]
+
+    assert asyncio.run(invoke(b"teacher-preview-01")) == b"teacher-preview-01"
+    generated = asyncio.run(invoke(b"contains spaces"))
+    assert len(generated) == 12
+    assert generated.isalnum()
 
 
 def test_natural_page_route_reports_unconfigured_provider_without_guessing(monkeypatch):
