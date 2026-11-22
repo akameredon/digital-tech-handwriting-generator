@@ -226,3 +226,24 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
+
+.natural-page-panel { border-color: #dfe6f4; }
+.natural-upload { margin-top: 4px; }
+.natural-preview-wrap { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; margin-top: 16px; }
+.natural-preview { display: block; width: min(100%, 420px); max-height: 520px; object-fit: contain; object-position: top left; border: 1px solid #e2e7ee; border-radius: 8px; background: #f7f8fa; }
+.natural-preview-caption { color: #718096; font-size: 9px; }
+.natural-results { margin-top: 20px; padding-top: 18px; border-top: 1px solid #e8edf4; }
+.natural-result-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.natural-result-heading h3 { margin: 5px 0 0; color: #243247; font-size: 14px; }
+.natural-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
+.natural-metrics > div { display: flex; flex-direction: column; gap: 5px; min-width: 0; padding: 12px; background: #f7f9fc; border: 1px solid #edf0f4; border-radius: 8px; }
+.natural-metrics strong { color: #26364d; font-size: 12px; overflow-wrap: anywhere; }
+.natural-metrics small { color: #66758a; font-size: 9px; line-height: 1.4; }
+.natural-checks { display: grid; gap: 7px; margin: 14px 0; padding-left: 18px; color: #526176; font-size: 10px; line-height: 1.55; }
+.recognition-boundary { padding: 13px 14px; background: #f6f8fc; border: 1px solid #e7edf7; border-radius: 8px; }
+.recognition-boundary strong { color: #344766; font-size: 10px; }
+.recognition-boundary p { margin: 6px 0 0; color: #5f6f86; font-size: 10px; line-height: 1.6; }
+@media (max-width: 760px) {
+  .natural-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .natural-result-heading { align-items: flex-start; }
+}
