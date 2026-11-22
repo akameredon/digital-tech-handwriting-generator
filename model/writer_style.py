@@ -41,6 +41,7 @@ class StyleLearningResult:
     coverage: Dict[str, int]
     missing: List[str]
     variant_count: int
+    evidence: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     warnings: List[str] = field(default_factory=list)
 
     @property
@@ -55,6 +56,7 @@ class StyleLearningResult:
             "missing": self.missing,
             "coverage_ratio": round(self.coverage_ratio, 3),
             "variant_count": self.variant_count,
+            "evidence": self.evidence,
             "warnings": self.warnings,
         }
 
@@ -180,6 +182,16 @@ class WriterStyleLearner:
         stats = self._style_stats(accepted_samples)
         profile = WriterProfile(name=writer_name, strokes=strokes, **stats)
         coverage = {label: len(variants) for label, variants in sorted(by_label.items())}
+        evidence: Dict[str, Dict[str, Any]] = {}
+        for label in sorted(by_label):
+            label_samples = [sample for sample in accepted_samples if sample.label == label]
+            evidence[label] = {
+                "sample_count": len(label_samples),
+                "mean_confidence": round(
+                    sum(sample.confidence for sample in label_samples) / len(label_samples), 4
+                ),
+                "sources": sorted({sample.source for sample in label_samples}),
+            }
         missing = [char for char in self.required_characters if char not in coverage]
         if missing:
             warnings.append(
@@ -188,4 +200,4 @@ class WriterStyleLearner:
             )
         if len(accepted_samples) < 12:
             warnings.append("Limited sample count; add repeated words and connected letter pairs for stronger identity.")
-        return StyleLearningResult(profile, coverage, missing, len(accepted_samples), warnings)
+        return StyleLearningResult(profile, coverage, missing, len(accepted_samples), evidence, warnings)

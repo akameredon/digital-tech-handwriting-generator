@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 
 from model.writer_style import VerifiedGlyphSample, WriterStyleLearner
+from model.profile_management import ManagedWriterProfile, WriterProfileStore
 from renderer.stroke_handwriting import WriterProfile
 
 
@@ -28,6 +29,11 @@ def test_learns_trajectory_profile_and_reports_incomplete_coverage():
     assert result.missing == []
     assert result.profile.glyph("a")
     assert result.coverage_ratio == 1.0
+    assert result.evidence["a"] == {
+        "sample_count": 1,
+        "mean_confidence": 1.0,
+        "sources": ["verified"],
+    }
 
 
 def test_low_confidence_samples_are_not_used_as_identity():
@@ -48,3 +54,21 @@ def test_learned_profile_can_be_saved_and_reloaded(tmp_path):
     loaded = WriterProfile.load(path)
     assert loaded.name == "learned-writer"
     assert loaded.glyph("a") == result.profile.glyph("a")
+
+
+def test_profile_store_merges_new_verified_variants_and_evidence(tmp_path):
+    learner = WriterStyleLearner(required_characters="a")
+    first = learner.fit([VerifiedGlyphSample("a", glyph_image(), confidence=0.80, source="page-1")])
+    second = learner.fit([VerifiedGlyphSample("a", glyph_image("b"), confidence=1.0, source="page-2")])
+    store = WriterProfileStore(tmp_path)
+    managed = ManagedWriterProfile(first.profile, evidence=dict(first.evidence))
+
+    store.merge_learning(managed, second)
+    assert len(managed.profile.strokes["a"]) == 2
+    assert managed.evidence["a"]["sample_count"] == 2
+    assert managed.evidence["a"]["sources"] == ["page-1", "page-2"]
+    assert managed.approved is False
+
+    store.save(managed)
+    reloaded = store.load("learned-writer")
+    assert reloaded.evidence["a"]["sample_count"] == 2

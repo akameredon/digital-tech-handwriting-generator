@@ -426,7 +426,13 @@ async def confirm_handwriting_page(
 
     learned = learn_writer_profile(confirmed, writer_name=writer_name.strip())
     store = WriterProfileStore(os.getenv("WRITER_PROFILE_DIR", "data/writer_profiles"))
-    managed = ManagedWriterProfile(learned.profile)
+    try:
+        managed = store.load(writer_name.strip())
+    except FileNotFoundError:
+        managed = ManagedWriterProfile(learned.profile)
+        managed.evidence = dict(learned.evidence)
+    else:
+        store.merge_learning(managed, learned)
     destination = store.save(managed)
     return {
         "profile": managed.public_dict(),

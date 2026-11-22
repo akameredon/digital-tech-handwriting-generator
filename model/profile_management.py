@@ -10,6 +10,7 @@ import tempfile
 from typing import Any, Dict, List, Optional
 
 from renderer.stroke_handwriting import Stroke, WriterProfile
+from model.writer_style import StyleLearningResult
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,7 @@ class ManagedWriterProfile:
     version: int = 1
     corrections: List[CorrectionEvent] = field(default_factory=list)
     approved: bool = False
+    evidence: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
     def public_dict(self) -> Dict[str, Any]:
         return {
@@ -34,6 +36,7 @@ class ManagedWriterProfile:
             "version": self.version,
             "approved": self.approved,
             "coverage": sorted(self.profile.strokes.keys()),
+            "glyph_evidence": self.evidence,
             "correction_count": len(self.corrections),
             "last_updated": self.corrections[-1].timestamp if self.corrections else None,
         }
@@ -61,6 +64,7 @@ class WriterProfileStore:
             "profile": profile,
             "version": managed.version,
             "approved": managed.approved,
+            "evidence": managed.evidence,
             "corrections": [asdict(event) for event in managed.corrections],
         }
 
@@ -76,7 +80,13 @@ class WriterProfileStore:
             for label, strokes in profile.strokes.items()
         }
         corrections = [CorrectionEvent(**item) for item in data.get("corrections", [])]
-        return ManagedWriterProfile(profile, int(data.get("version", 1)), corrections, bool(data.get("approved", False)))
+        return ManagedWriterProfile(
+            profile,
+            int(data.get("version", 1)),
+            corrections,
+            bool(data.get("approved", False)),
+            dict(data.get("evidence", {})),
+        )
 
     def save(self, managed: ManagedWriterProfile) -> Path:
         destination = self._path(managed.profile.name)
@@ -119,6 +129,45 @@ class WriterProfileStore:
         managed.version += 1
         managed.approved = False
         managed.corrections.append(CorrectionEvent(datetime.now(timezone.utc).isoformat(), character, old_label, new_label, reason))
+        return managed
+
+    def merge_learning(self, managed: ManagedWriterProfile, learning: StyleLearningResult) -> ManagedWriterProfile:
+        """Merge a new verified batch while retaining old variants and evidence."""
+        previous_count = sum(
+            int(item.get("sample_count", 0)) for item in managed.evidence.values()
+        )
+        incoming_count = max(0, int(learning.variant_count))
+        total_count = previous_count + incoming_count
+        if total_count:
+            for field_name in ("scale", "slant", "stroke_width", "pressure"):
+                old_value = float(getattr(managed.profile, field_name))
+                new_value = float(getattr(learning.profile, field_name))
+                weight = incoming_count / total_count
+                setattr(managed.profile, field_name, old_value * (1 - weight) + new_value * weight)
+
+        for label, strokes in learning.profile.strokes.items():
+            managed.profile.strokes.setdefault(label, []).extend(strokes)
+        for label, incoming in learning.evidence.items():
+            existing = managed.evidence.get(label)
+            if not existing:
+                managed.evidence[label] = dict(incoming)
+                continue
+            old_samples = int(existing.get("sample_count", 0))
+            new_samples = int(incoming.get("sample_count", 0))
+            count = old_samples + new_samples
+            if count:
+                existing["mean_confidence"] = round(
+                    (
+                        float(existing.get("mean_confidence", 0.0)) * old_samples
+                        + float(incoming.get("mean_confidence", 0.0)) * new_samples
+                    )
+                    / count,
+                    4,
+                )
+            existing["sample_count"] = count
+            existing["sources"] = sorted(set(existing.get("sources", [])) | set(incoming.get("sources", [])))
+        managed.version += 1
+        managed.approved = False
         return managed
 
     def approve(self, managed: ManagedWriterProfile) -> ManagedWriterProfile:
