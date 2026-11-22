@@ -153,3 +153,30 @@ def test_rejects_decompression_bomb_dimensions():
         assert "24 megapixels" in str(exc)
     else:
         raise AssertionError("Images above the pixel safety limit must be rejected")
+
+
+def test_separates_two_columns_on_the_same_notebook_line():
+    image = np.full((900, 900, 3), 248, dtype=np.uint8)
+    for y in (180, 320, 460, 600):
+        cv2.putText(image, "Left column notes", (35, y),
+                    cv2.FONT_HERSHEY_SCRIPT_SIMPLEX, 0.8, (25, 35, 70), 2)
+        cv2.putText(image, "Right column notes", (520, y),
+                    cv2.FONT_HERSHEY_SCRIPT_SIMPLEX, 0.8, (25, 35, 70), 2)
+    analysis = OpenHandwritingIntake().analyze_image(image)
+    first_band = [line for line in analysis.lines if line.bbox[1] < 220]
+    assert len(first_band) == 2
+    assert first_band[0].bbox[0] < 200
+    assert first_band[1].bbox[0] > 450
+
+
+def test_exif_orientation_is_applied_before_analysis():
+    from io import BytesIO
+    from PIL import Image
+    source = Image.new("RGB", (700, 900), "white")
+    exif = Image.Exif()
+    exif[274] = 6
+    buffer = BytesIO()
+    source.save(buffer, format="JPEG", exif=exif)
+    decoded = OpenHandwritingIntake().decode(buffer.getvalue())
+    assert decoded.shape[1] == 900
+    assert decoded.shape[0] == 700
