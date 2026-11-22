@@ -65,10 +65,14 @@ def test_byte_upload_intake_accepts_natural_page(tmp_path):
     upload = UploadFile(file=BytesIO(path.read_bytes()), filename="teacher-page.png",
                         headers={"content-type": "image/png"})
     response = __import__("asyncio").run(analyze_natural_handwriting_page(upload))
-    assert response["status"] == "analyzed"
-    assert response["recognition_status"] == "not_configured"
-    assert response["analysis"]["line_count"] >= 2
-    assert "blur_score" in response["analysis"]
+    import json
+    payload = json.loads(response.body)
+    assert response.status_code == 200
+    assert payload["status"] == "analyzed"
+    assert payload["recognition_status"] == "not_configured"
+    assert payload["source_retention"] == "not_stored"
+    assert payload["analysis"]["line_count"] >= 2
+    assert "blur_score" in payload["analysis"]
 
 
 def test_byte_upload_rejects_payload_over_limit():
