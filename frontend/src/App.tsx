@@ -535,7 +535,7 @@ function sectionLabel(section: Section) {
 }
 
 function NavButton({ active, onClick, mark, children }: { active: boolean; onClick: () => void; mark: string; children: string }) {
-  return <button className={active ? "nav-button active" : "nav-button"} onClick={onClick} aria-current={active ? "page" : undefined}><span className="nav-mark" aria-hidden="true">{mark}</span>{children}</button>;
+  return <button type="button" className={active ? "nav-button active" : "nav-button"} onClick={onClick} aria-current={active ? "page" : undefined}><span className="nav-mark" aria-hidden="true">{mark}</span>{children}</button>;
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -544,12 +544,12 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 function StepBar({ activeStep }: { activeStep: number }) {
   const steps = ["Choose lesson", "Review content", "Export PDF"];
-  return <div className="stepbar" aria-label="Lesson preparation steps">
+  return <div className="stepbar" role="list" aria-label="Lesson preparation steps">
     {steps.map((label, index) => {
       const number = index + 1;
       const active = number === activeStep;
       const complete = number < activeStep;
-      return <span className={`stepbar-item ${active ? "active" : ""} ${complete ? "complete" : ""}`} aria-current={active ? "step" : undefined} key={label}>
+      return <span className={`stepbar-item ${active ? "active" : ""} ${complete ? "complete" : ""}`} role="listitem" aria-current={active ? "step" : undefined} key={label}>
         <span>{complete ? "✓" : number}</span><strong>{label}</strong>
       </span>;
     }).flatMap((item, index) => index < steps.length - 1 ? [item, <i key={`connector-${index}`} />] : [item])}

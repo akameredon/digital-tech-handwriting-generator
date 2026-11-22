@@ -10,7 +10,15 @@ from fastapi import HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from starlette.datastructures import UploadFile
 
-from main import analyze_handwriting_page, app, build_lesson_payload, get_lesson_note, get_topics, home
+from main import (
+    SecurityHeadersMiddleware,
+    analyze_handwriting_page,
+    app,
+    build_lesson_payload,
+    get_lesson_note,
+    get_topics,
+    home,
+)
 
 
 def test_existing_and_new_web_routes_are_available():
@@ -65,6 +73,30 @@ def test_root_serves_compiled_frontend_when_build_exists():
         assert isinstance(response, (HTMLResponse, str))
         body = response.body.decode() if isinstance(response, HTMLResponse) else response
         assert "Digital Technologies" in body or "Lesson" in body
+
+
+def test_security_headers_are_added_without_overwriting_existing_headers():
+    sent = []
+
+    async def endpoint(scope, receive, send):
+        await send({
+            "type": "http.response.start",
+            "status": 200,
+            "headers": [(b"x-frame-options", b"SAMEORIGIN"), (b"x-existing", b"keep")],
+        })
+        await send({"type": "http.response.body", "body": b"ok"})
+
+    async def capture(message):
+        sent.append(message)
+
+    middleware = SecurityHeadersMiddleware(endpoint)
+    asyncio.run(middleware({"type": "http", "path": "/health"}, None, capture))
+    headers = dict(sent[0]["headers"])
+    assert headers[b"x-frame-options"] == b"SAMEORIGIN"
+    assert headers[b"x-existing"] == b"keep"
+    assert headers[b"x-content-type-options"] == b"nosniff"
+    assert headers[b"referrer-policy"] == b"strict-origin-when-cross-origin"
+    assert headers[b"permissions-policy"] == b"camera=(), microphone=(), geolocation=()"
 
 
 def test_natural_page_route_reports_unconfigured_provider_without_guessing(monkeypatch):

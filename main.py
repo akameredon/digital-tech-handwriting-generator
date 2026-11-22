@@ -103,12 +103,43 @@ class HandwritingUploadLimitMiddleware:
             )
             await response(scope, receive, send)
 
+
+class SecurityHeadersMiddleware:
+    """Add browser-safe defaults without requiring a reverse proxy."""
+
+    HEADERS = (
+        (b"x-content-type-options", b"nosniff"),
+        (b"x-frame-options", b"DENY"),
+        (b"referrer-policy", b"strict-origin-when-cross-origin"),
+        (b"permissions-policy", b"camera=(), microphone=(), geolocation=()"),
+    )
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def secured_send(message):
+            if message.get("type") == "http.response.start":
+                headers = list(message.get("headers", []))
+                present = {name.lower() for name, _ in headers}
+                headers.extend((name, value) for name, value in self.HEADERS if name not in present)
+                message = {**message, "headers": headers}
+            await send(message)
+
+        await self.app(scope, receive, secured_send)
+
+
 app = FastAPI(
     title="Digital Technologies Lesson Note Generator",
     description="NERDC 2025 aligned lesson notes for SS1-SS3 Digital Technologies",
     version="1.1.2"
 )
 app.add_middleware(HandwritingUploadLimitMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 
 ROOT_DIR = Path(__file__).parent
 SAMPLES_DIR = ROOT_DIR / "samples"
