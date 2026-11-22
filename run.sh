@@ -3,7 +3,7 @@
 
 echo "=============================================="
 echo " Digital Technologies Lesson Note Generator"
-echo " NERDC 2025 • SS1–SS3 • Production Ready"
+echo " NERDC 2025 • SS1–SS3 • Local development"
 echo "=============================================="
 echo ""
 

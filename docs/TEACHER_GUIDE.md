@@ -7,8 +7,8 @@
 ## 1. Quick Start (5 minutes)
 
 ```bash
-git clone https://github.com/akameredon/digital-tech-handwriting-generator.git
-cd digital-tech-handwriting-generator
+git clone https://github.com/akameredon/ink-flow-handwriting-studio.git
+cd ink-flow-handwriting-studio
 python3 -m venv venv
 source venv/bin/activate          # Windows: venv\Scripts\activate
 pip install -r requirements.txt
