@@ -401,6 +401,7 @@ function App() {
                 </label>
                 <p className="sample-help">For best results, photograph the full page in even light, keep the camera parallel to the paper and make the writing sharp and readable.</p>
                 {naturalPagePreview && <div className="natural-preview-wrap"><img className="natural-preview" src={naturalPagePreview} alt="Selected handwritten notebook page preview" /><div className="natural-preview-caption">Original upload preview · retained in this browser session only</div></div>}
+                {naturalAnalysis?.analysis.processed_preview && <div className="natural-preview-wrap"><img className="natural-preview" src={naturalAnalysis.analysis.processed_preview} alt="Perspective-corrected notebook page with detected writing-line boxes" /><div className="natural-preview-caption">Processed preview · green boxes mark detected writing lines and columns</div></div>}
                 <div className="panel-actions">
                   <span className="helper-text">The original upload is not saved as a teacher profile.</span>
                   <button className="button button-primary" onClick={inspectNaturalPage} disabled={!naturalPage || analyzingNaturalPage}>
