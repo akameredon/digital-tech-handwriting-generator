@@ -47,3 +47,62 @@ def test_all_invalid_samples_raise():
         assert "No verifiable" in str(exc)
     else:
         raise AssertionError("Invalid labels should not produce an alignment result")
+
+
+def line_image():
+    image = np.full((32, 90), 255, dtype=np.uint8)
+    cv2.rectangle(image, (4, 8), (20, 25), 0, -1)
+    cv2.rectangle(image, (30, 6), (48, 26), 0, -1)
+    return image
+
+
+def test_line_text_without_character_geometry_is_not_positionally_mapped():
+    result = CharacterAligner().align_recognized_line(
+        line_image(), (100, 200, 90, 32), {"text": "ab", "confidence": 0.99}
+    )
+    assert result.candidates == []
+    assert result.review[0]["reason"] == "character_geometry_missing"
+
+
+def test_geometry_count_mismatch_is_rejected_instead_of_zipped():
+    result = CharacterAligner().align_recognized_line(
+        line_image(), (100, 200, 90, 32), {
+            "text": "ab",
+            "character_boxes": [{"bbox": [2, 6, 22, 22], "confidence": 0.99}],
+        }
+    )
+    assert result.candidates == []
+    assert result.review[0]["reason"] == "character_geometry_count_mismatch"
+
+
+def test_explicit_geometry_creates_candidates_and_confirmation_promotes_them():
+    result = CharacterAligner().align_recognized_line(
+        line_image(), (100, 200, 90, 32), {
+            "text": "ab",
+            "character_boxes": [
+                {"bbox": [2, 6, 22, 22], "confidence": 0.99},
+                {"bbox": [28, 4, 23, 25], "confidence": 0.97},
+            ],
+        }
+    )
+    assert result.ready_for_confirmation is True
+    assert [candidate.label for candidate in result.candidates] == ["a", "b"]
+    confirmed = CharacterAligner().confirm_candidates(
+        result.candidates, {0: "a", 1: "b"}, source_width=400, source_height=400
+    )
+    assert [item.label for item in confirmed.observations] == ["a", "b"]
+    assert all("teacher_confirmed" in item.source for item in confirmed.observations)
+
+
+def test_low_confidence_character_is_localized_for_review():
+    result = CharacterAligner().align_recognized_line(
+        line_image(), (0, 0, 90, 32), {
+            "text": "ab",
+            "character_boxes": [
+                {"bbox": [2, 6, 22, 22], "confidence": 0.99},
+                {"bbox": [28, 4, 23, 25], "confidence": 0.40},
+            ],
+        }
+    )
+    assert len(result.candidates) == 1
+    assert result.review[0]["label"] == "b"

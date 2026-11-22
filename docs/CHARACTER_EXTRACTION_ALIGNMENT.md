@@ -1,23 +1,25 @@
 # Character extraction and alignment
 
-`model/character_alignment.py` implements Rank 3 for labeled handwriting evidence.
+The alignment layer separates **model candidates** from **trusted observations**.
 
-Each accepted character retains:
-
-- the verified Unicode label and original sequence index;
-- the label provenance (`worksheet_cell_teacher_confirmation_required` or another explicit verified source);
-- source-page bounding box and normalized page coordinates;
-- a 96×96 normalized crop for downstream style learning;
-- component count, ink ratio, border-touching flag, and a review-oriented quality score.
-
-The aligner rejects guessed labels, empty crops, malformed labels, and samples with too little ink. Duplicate labels are retained as variants rather than overwritten, enabling the style learner to preserve repeated examples. Quality is deliberately a review signal, not a fabricated recognition probability.
+A line transcript alone is not enough to create a glyph. The recognizer must return one explicit character box per non-whitespace character. The aligner rejects missing geometry, malformed boxes, count mismatches, out-of-bounds boxes, empty crops, and low-confidence candidates. It never assigns labels by component order or horizontal position.
 
 ```python
 from model.character_alignment import CharacterAligner
 
-result = CharacterAligner().align(glyphs_from_verified_worksheet)
-for character in result.accepted:
-    print(character.label, character.source_bbox, character.quality)
+result = CharacterAligner().align_recognized_line(
+    line_image,
+    line_bbox,
+    {
+        "text": "Hello",
+        "character_boxes": [
+            {"bbox": [10, 4, 12, 24], "confidence": 0.98},
+            # one entry for each non-space character
+        ],
+    },
+)
 ```
 
-This result can feed `WriterStyleLearner` after review. The separation keeps extraction/alignment traceable and prevents a visually plausible but incorrectly labeled sample from contaminating a teacher profile.
+Candidates remain pending until the teacher confirms the label. Only the explicit confirmation path creates `CharacterObservation` records with verified provenance that can be passed to writer-profile or font-compilation code.
+
+The current TrOCR adapter is line-level and does not provide character geometry. Therefore it can support transcription and benchmarking, but it must not be used by itself for personalized glyph extraction. A future recognizer or alignment model must implement the geometry portion of the contract before natural-page glyph learning can be enabled.
