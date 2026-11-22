@@ -114,3 +114,52 @@ export async function exportHandwritingPdf(
   const missingCharacters = Number(response.headers.get("X-Handwriting-Missing-Count") ?? totalCharacters);
   return { blob, coveredCharacters, totalCharacters, missingCharacters };
 }
+
+export type HandwritingAnalysis = {
+  analysis: {
+    width: number;
+    height: number;
+    quality: string;
+    warnings: string[];
+    line_count: number;
+    lines: Array<{ index: number; bbox: number[]; ink_ratio: number }>;
+  };
+  recognition: {
+    text: string;
+    provider: string;
+    needs_review: boolean;
+    warnings: string[];
+    lines: Array<{
+      line_index: number;
+      bbox: number[];
+      text: string;
+      confidence: number;
+      alternatives: string[];
+      needs_review: boolean;
+      review_reasons: string[];
+      character_boxes: Array<{ bbox?: number[]; confidence?: number }>;
+    }>;
+  };
+  glyph_alignment: {
+    line_count: number;
+    candidate_count: number;
+    needs_review: boolean;
+    warnings: string[];
+    lines: Array<{
+      candidate_count: number;
+      review_count: number;
+      candidates: Array<{ label: string; source_bbox: number[]; confidence: number; source: string; review_reasons: string[] }>;
+      review: Array<{ reason: string; message?: string; label?: string; index?: number }>;
+      warnings: string[];
+    }>;
+  };
+};
+
+export async function analyzeHandwritingPage(page: File): Promise<HandwritingAnalysis> {
+  const form = new FormData();
+  form.append("page", page);
+  return readJson<HandwritingAnalysis>(await fetch(`${API_BASE}/analyze/handwriting`, {
+    method: "POST",
+    body: form,
+  }));
+}

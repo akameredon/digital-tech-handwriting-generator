@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 from pathlib import Path
 import shutil
 import tempfile
@@ -26,11 +27,16 @@ from ingestion.calibration_sheet import (
     write_calibration_sheet,
 )
 from ingestion.preprocessor import DEFAULT_SAMPLE_ROWS
+from ingestion.open_handwriting import HandwritingIntakeError, OpenHandwritingIntake, RecognitionUnavailable
 from model.font_compiler import FontCompilationError, FontCompiler
+from model.glyph_alignment_pipeline import align_document_glyphs
+from model.htr import HTRPipeline
+from model.htr_providers import HTRProviderConfigurationError, trocr_from_environment
 from renderer.pdf_exporter import ClassmatePDFExporter
 
 logger = logging.getLogger(__name__)
 MAX_HANDWRITING_REQUEST_BYTES = MAX_IMAGE_BYTES + 256 * 1024
+_natural_htr_provider = None
 
 
 class RequestBodyTooLarge(Exception):
@@ -45,7 +51,7 @@ class HandwritingUploadLimitMiddleware:
         self.active_uploads = asyncio.Semaphore(2)
 
     async def __call__(self, scope, receive, send):
-        if scope.get("type") != "http" or scope.get("path") != "/export/handwriting-pdf":
+        if scope.get("type") != "http" or scope.get("path") not in {"/export/handwriting-pdf", "/analyze/handwriting"}:
             await self.app(scope, receive, send)
             return
 
@@ -298,6 +304,74 @@ def download_calibration_sheet():
         logger.exception("Handwriting calibration sheet could not be created")
         shutil.rmtree(temp_dir, ignore_errors=True)
         raise HTTPException(status_code=500, detail="The optional calibration sheet could not be created.")
+
+
+def _configured_natural_htr_provider():
+    """Return the explicitly configured local provider, without guessing.
+
+    Model initialization is lazy and happens only when the natural-page route
+    is used. The base application remains usable without the optional ML extra.
+    """
+    global _natural_htr_provider
+    if os.getenv("HTR_PROVIDER", "").lower() != "trocr":
+        raise RecognitionUnavailable(
+            "Natural-page handwriting recognition is not enabled on this server. "
+            "Set HTR_PROVIDER=trocr after provisioning the optional local model."
+        )
+    if _natural_htr_provider is None:
+        _natural_htr_provider = trocr_from_environment()
+    return _natural_htr_provider
+
+
+def _analyze_natural_handwriting(image_bytes: bytes):
+    """Analyze one page and retain all HTR/alignment evidence for review."""
+    temp_dir = Path(tempfile.mkdtemp(prefix="dt-natural-handwriting-"))
+    image_path = temp_dir / "page.jpg"
+    try:
+        image_path.write_bytes(image_bytes)
+        analysis = OpenHandwritingIntake().analyze(image_path)
+        provider = _configured_natural_htr_provider()
+        recognition = HTRPipeline(provider).recognize(analysis)
+        alignment = align_document_glyphs(analysis, recognition)
+        return {
+            "analysis": analysis.public_dict(),
+            "recognition": recognition.public_dict(),
+            "glyph_alignment": alignment.public_dict(),
+        }
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+@app.post("/analyze/handwriting")
+async def analyze_handwriting_page(page: UploadFile = File(...)):
+    """Analyze a natural page without compiling any unconfirmed glyphs."""
+    request_id = uuid4().hex[:12]
+    temp_bytes = None
+    try:
+        temp_bytes = await page.read(MAX_IMAGE_BYTES + 1)
+        if len(temp_bytes) > MAX_IMAGE_BYTES:
+            raise HTTPException(status_code=413, detail="The handwriting page must be smaller than 12 MB.")
+        if not temp_bytes:
+            raise HTTPException(status_code=422, detail="Upload a JPG or PNG handwriting page.")
+        return await run_in_threadpool(_analyze_natural_handwriting, temp_bytes)
+    except HTTPException:
+        raise
+    except HandwritingIntakeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RecognitionUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except HTRProviderConfigurationError as exc:
+        logger.exception("Natural handwriting provider unavailable request_id=%s", request_id)
+        raise HTTPException(
+            status_code=503,
+            detail=f"Natural handwriting recognition is not ready. Reference: {request_id}",
+        ) from exc
+    except Exception as exc:
+        logger.exception("Natural handwriting analysis failed request_id=%s", request_id)
+        raise HTTPException(
+            status_code=500,
+            detail=f"The handwriting page could not be analyzed. Reference: {request_id}",
+        ) from exc
 
 
 def _create_handwriting_pdf(payload, image_bytes: bytes, temp_dir: Path, request_id: str):

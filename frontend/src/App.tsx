@@ -4,11 +4,13 @@ import {
   downloadCalibrationSheet,
   exportLessonPdf,
   exportHandwritingPdf,
+  analyzeHandwritingPage,
   getLesson,
   getPrompt,
   getTopics,
   type Lesson,
-  type Topic
+  type Topic,
+  type HandwritingAnalysis
 } from "./api";
 
 type Section = "create" | "curriculum" | "handwriting" | "help";
@@ -29,6 +31,9 @@ function App() {
   const [labelsConfirmed, setLabelsConfirmed] = useState(false);
   const [downloadingCalibration, setDownloadingCalibration] = useState(false);
   const [exportingHandwriting, setExportingHandwriting] = useState(false);
+  const [naturalPage, setNaturalPage] = useState<File | null>(null);
+  const [naturalAnalysis, setNaturalAnalysis] = useState<HandwritingAnalysis | null>(null);
+  const [analyzingNaturalPage, setAnalyzingNaturalPage] = useState(false);
   const [loadingTopics, setLoadingTopics] = useState(true);
   const [loadingLesson, setLoadingLesson] = useState(false);
   const [loadingPrompt, setLoadingPrompt] = useState(false);
@@ -182,6 +187,24 @@ function App() {
       }
     } finally {
       if (requestId === handwritingRequestId.current) setExportingHandwriting(false);
+    }
+  }
+
+  async function analyzeNaturalPage() {
+    clearFeedback();
+    if (!naturalPage) {
+      setError("Choose an ordinary notebook page first.");
+      return;
+    }
+    setAnalyzingNaturalPage(true);
+    try {
+      const result = await analyzeHandwritingPage(naturalPage);
+      setNaturalAnalysis(result);
+      setNotice("The page was analyzed. Only explicit character geometry can become a glyph; uncertain evidence remains for review.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "We couldn't analyze this handwriting page.");
+    } finally {
+      setAnalyzingNaturalPage(false);
     }
   }
 
@@ -343,7 +366,28 @@ function App() {
 
           {section === "handwriting" && (
             <>
-              <div className="page-heading"><div className="eyebrow"><span className="eyebrow-line" /> HANDWRITING WORKFLOW</div><h1>Create a handwriting-style lesson PDF.</h1><p>This experimental handwriting workflow builds a partial personal font from a generated, labeled worksheet. Natural notebook-page recognition is not supported.</p></div>
+              <div className="page-heading"><div className="eyebrow"><span className="eyebrow-line" /> HANDWRITING WORKFLOW</div><h1>Create a handwriting-style lesson PDF.</h1><p>This workflow separates natural-page analysis from the optional worksheet export. Recognition evidence is never promoted into a glyph by position alone.</p></div>
+              <section className="panel">
+                <div className="panel-heading"><div><span className="step-kicker">NATURAL PAGE · ANALYSIS PREVIEW</span><h2>Analyze an ordinary handwriting page</h2><p>This checks page lines and recognition evidence without compiling or trusting any unconfirmed glyph.</p></div><span className="panel-icon">01</span></div>
+                <label className="upload-box">
+                  <span className="upload-symbol" aria-hidden="true">↑</span>
+                  <span className="upload-copy"><strong>{naturalPage?.name ?? "Choose a notebook page"}</strong><small>JPG or PNG, natural layout, under 12 MB</small></span>
+                  <span className="button button-secondary upload-button" aria-hidden="true">Browse files</span>
+                  <input type="file" accept="image/jpeg,image/png" aria-label="Choose an ordinary handwriting page" onChange={(event) => { setNaturalPage(event.target.files?.[0] ?? null); setNaturalAnalysis(null); clearFeedback(); }} />
+                </label>
+                <div className="panel-actions">
+                  <span className="helper-text">Line text without character geometry cannot create personalized glyphs.</span>
+                  <button className="button button-secondary" onClick={analyzeNaturalPage} disabled={!naturalPage || analyzingNaturalPage}>
+                    {analyzingNaturalPage ? "Analyzing page…" : "Analyze natural page"} <span aria-hidden="true">→</span>
+                  </button>
+                </div>
+                {naturalAnalysis && <div className="callout" role="status">
+                  <strong>{naturalAnalysis.analysis.line_count} line{naturalAnalysis.analysis.line_count === 1 ? "" : "s"} analyzed · {naturalAnalysis.glyph_alignment.candidate_count} glyph candidate{naturalAnalysis.glyph_alignment.candidate_count === 1 ? "" : "s"}</strong>
+                  <p>{naturalAnalysis.glyph_alignment.needs_review ? "Review is required. No candidate is trusted until its character geometry and label are explicitly confirmed." : "All candidates have explicit geometry and are ready for confirmation."}</p>
+                  {naturalAnalysis.recognition.lines.map((line) => <div className="review-row" key={line.line_index}><strong>Line {line.line_index + 1}: {line.text || "No text recognized"}</strong><small>Confidence {Math.round(line.confidence * 100)}% · {line.review_reasons.join("; ") || "No line review flags"}</small></div>)}
+                  {naturalAnalysis.glyph_alignment.lines.flatMap((line) => line.review).map((item, index) => <div className="review-row" key={`${item.reason}-${index}`}><strong>{item.label ? `Character ${item.label}` : "Glyph evidence"}</strong><small>{item.message ?? item.reason}</small></div>)}
+                </div>}
+              </section>
               <section className="panel">
                 <div className="panel-heading"><div><span className="step-kicker">STEP 01 · CHOOSE A LESSON</span><h2>Choose the note for your PDF</h2><p>The regular printable PDF remains available without a worksheet or handwriting sample.</p></div></div>
                 <div className="form-grid">

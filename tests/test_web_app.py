@@ -1,12 +1,16 @@
 """Regression checks for lesson lookup and the public HTTP surface."""
 import asyncio
+from io import BytesIO
 from pathlib import Path
 
+import cv2
+import numpy as np
 import pytest
 from fastapi import HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
+from starlette.datastructures import UploadFile
 
-from main import app, build_lesson_payload, get_lesson_note, get_topics, home
+from main import analyze_handwriting_page, app, build_lesson_payload, get_lesson_note, get_topics, home
 
 
 def test_existing_and_new_web_routes_are_available():
@@ -18,6 +22,7 @@ def test_existing_and_new_web_routes_are_available():
     assert "/export/lesson-pdf" in paths
     assert "/handwriting/calibration-sheet" in paths
     assert "/export/handwriting-pdf" in paths
+    assert "/analyze/handwriting" in paths
 
 
 def test_invalid_topic_filter_is_a_client_error():
@@ -59,3 +64,16 @@ def test_root_serves_compiled_frontend_when_build_exists():
         assert isinstance(response, (HTMLResponse, str))
         body = response.body.decode() if isinstance(response, HTMLResponse) else response
         assert "Digital Technologies" in body or "Lesson" in body
+
+
+def test_natural_page_route_reports_unconfigured_provider_without_guessing(monkeypatch):
+    image = np.full((240, 640, 3), 255, dtype=np.uint8)
+    cv2.putText(image, "Handwriting sample", (20, 100), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 0), 3)
+    encoded = cv2.imencode(".png", image)[1].tobytes()
+    monkeypatch.delenv("HTR_PROVIDER", raising=False)
+    upload = UploadFile(file=BytesIO(encoded), filename="page.png")
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(analyze_handwriting_page(upload))
+    assert exc.value.status_code == 503
+    assert "not enabled" in str(exc.value.detail)
