@@ -5,6 +5,7 @@ import {
   exportLessonPdf,
   exportHandwritingPdf,
   analyzeHandwritingPage,
+  confirmHandwritingPage,
   getLesson,
   getPrompt,
   getTopics,
@@ -33,6 +34,9 @@ function App() {
   const [exportingHandwriting, setExportingHandwriting] = useState(false);
   const [naturalPage, setNaturalPage] = useState<File | null>(null);
   const [naturalAnalysis, setNaturalAnalysis] = useState<HandwritingAnalysis | null>(null);
+  const [writerName, setWriterName] = useState("");
+  const [confirmedCandidates, setConfirmedCandidates] = useState<Record<string, boolean>>({});
+  const [confirmingCandidates, setConfirmingCandidates] = useState(false);
   const [analyzingNaturalPage, setAnalyzingNaturalPage] = useState(false);
   const [loadingTopics, setLoadingTopics] = useState(true);
   const [loadingLesson, setLoadingLesson] = useState(false);
@@ -200,11 +204,46 @@ function App() {
     try {
       const result = await analyzeHandwritingPage(naturalPage);
       setNaturalAnalysis(result);
+      setConfirmedCandidates({});
       setNotice("The page was analyzed. Only explicit character geometry can become a glyph; uncertain evidence remains for review.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "We couldn't analyze this handwriting page.");
     } finally {
       setAnalyzingNaturalPage(false);
+    }
+  }
+
+  async function confirmNaturalCandidates() {
+    clearFeedback();
+    if (!naturalPage || !naturalAnalysis) {
+      setError("Analyze an ordinary handwriting page before confirming candidates.");
+      return;
+    }
+    if (!writerName.trim()) {
+      setError("Enter the teacher or writer name before saving confirmed glyphs.");
+      return;
+    }
+    const confirmations: Record<string, string> = {};
+    naturalAnalysis.glyph_alignment.lines.forEach((line, lineIndex) => {
+      line.candidates.forEach((candidate, candidateIndex) => {
+        if (confirmedCandidates[`${lineIndex}:${candidateIndex}`]) {
+          confirmations[`${lineIndex}:${candidateIndex}`] = candidate.label;
+        }
+      });
+    });
+    if (!Object.keys(confirmations).length) {
+      setError("Select at least one candidate after checking its label against the page.");
+      return;
+    }
+    setConfirmingCandidates(true);
+    try {
+      const result = await confirmHandwritingPage(naturalPage, writerName.trim(), confirmations);
+      setNotice(`${result.confirmed_count} confirmed glyph${result.confirmed_count === 1 ? "" : "s"} saved to ${result.profile.name}. New evidence requires profile approval before reuse.`);
+      setConfirmedCandidates({});
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "We couldn't save the confirmed glyphs.");
+    } finally {
+      setConfirmingCandidates(false);
     }
   }
 
@@ -381,12 +420,27 @@ function App() {
                     {analyzingNaturalPage ? "Analyzing page…" : "Analyze natural page"} <span aria-hidden="true">→</span>
                   </button>
                 </div>
-                {naturalAnalysis && <div className="callout" role="status">
-                  <strong>{naturalAnalysis.analysis.line_count} line{naturalAnalysis.analysis.line_count === 1 ? "" : "s"} analyzed · {naturalAnalysis.glyph_alignment.candidate_count} glyph candidate{naturalAnalysis.glyph_alignment.candidate_count === 1 ? "" : "s"}</strong>
-                  <p>{naturalAnalysis.glyph_alignment.needs_review ? "Review is required. No candidate is trusted until its character geometry and label are explicitly confirmed." : "All candidates have explicit geometry and are ready for confirmation."}</p>
-                  {naturalAnalysis.recognition.lines.map((line) => <div className="review-row" key={line.line_index}><strong>Line {line.line_index + 1}: {line.text || "No text recognized"}</strong><small>Confidence {Math.round(line.confidence * 100)}% · {line.review_reasons.join("; ") || "No line review flags"}</small></div>)}
-                  {naturalAnalysis.glyph_alignment.lines.flatMap((line) => line.review).map((item, index) => <div className="review-row" key={`${item.reason}-${index}`}><strong>{item.label ? `Character ${item.label}` : "Glyph evidence"}</strong><small>{item.message ?? item.reason}</small></div>)}
-                </div>}
+                  {naturalAnalysis && <div className="callout" role="status">
+                    <strong>{naturalAnalysis.analysis.line_count} line{naturalAnalysis.analysis.line_count === 1 ? "" : "s"} analyzed · {naturalAnalysis.glyph_alignment.candidate_count} glyph candidate{naturalAnalysis.glyph_alignment.candidate_count === 1 ? "" : "s"}</strong>
+                    <p>{naturalAnalysis.glyph_alignment.needs_review ? "Review is required. No candidate is trusted until its character geometry and label are explicitly confirmed." : "All candidates have explicit geometry and are ready for confirmation."}</p>
+                    {naturalAnalysis.recognition.lines.map((line) => <div className="review-row" key={line.line_index}><strong>Line {line.line_index + 1}: {line.text || "No text recognized"}</strong><small>Confidence {Math.round(line.confidence * 100)}% · {line.review_reasons.join("; ") || "No line review flags"}</small></div>)}
+                    {naturalAnalysis.glyph_alignment.lines.flatMap((line) => line.review).map((item, index) => <div className="review-row" key={`${item.reason}-${index}`}><strong>{item.label ? `Character ${item.label}` : "Glyph evidence"}</strong><small>{item.message ?? item.reason}</small></div>)}
+                    {naturalAnalysis.glyph_alignment.candidate_count > 0 && <div className="candidate-review">
+                      <strong className="candidate-review-title">Confirm recognizable candidates</strong>
+                      <p className="sample-help">Check a candidate only after comparing its displayed label with the uploaded page. Unchecked or uncertain candidates remain out of the profile.</p>
+                      {naturalAnalysis.glyph_alignment.lines.map((line, lineIndex) => line.candidates.map((candidate, candidateIndex) => {
+                        const key = `${lineIndex}:${candidateIndex}`;
+                        return <label className="confirmation-check candidate-check" key={key}>
+                          <input type="checkbox" checked={Boolean(confirmedCandidates[key])} onChange={(event) => setConfirmedCandidates((current) => ({ ...current, [key]: event.target.checked }))} />
+                          <span><strong>Line {lineIndex + 1} · “{candidate.label}”</strong><small>Confidence {Math.round(candidate.confidence * 100)}% · source box {candidate.source_bbox.join(", ")}</small></span>
+                        </label>;
+                      }))}
+                      <div className="form-grid two-fields candidate-submit">
+                        <Field label="Writer or teacher name"><input value={writerName} onChange={(event) => setWriterName(event.target.value)} placeholder="e.g. Mrs Okafor" /></Field>
+                        <button className="button button-primary" onClick={confirmNaturalCandidates} disabled={confirmingCandidates || !writerName.trim()}>{confirmingCandidates ? "Saving confirmations…" : "Save confirmed glyphs"} <span aria-hidden="true">→</span></button>
+                      </div>
+                    </div>}
+                  </div>}
               </section>
               <section className="panel">
                 <div className="panel-heading"><div><span className="step-kicker">STEP 01 · CHOOSE A LESSON</span><h2>Choose the note for your PDF</h2><p>The regular printable PDF remains available without a worksheet or handwriting sample.</p></div></div>

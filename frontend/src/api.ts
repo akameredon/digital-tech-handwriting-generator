@@ -163,3 +163,30 @@ export async function analyzeHandwritingPage(page: File): Promise<HandwritingAna
     body: form,
   }));
 }
+
+export type ConfirmedProfileResult = {
+  profile: {
+    name: string;
+    version: number;
+    approved: boolean;
+    coverage: string[];
+    glyph_evidence: Record<string, { sample_count: number; mean_confidence: number; sources: string[] }>;
+  };
+  confirmed_count: number;
+  learning: { coverage: Record<string, number>; missing: string[]; coverage_ratio: number; evidence: Record<string, unknown> };
+};
+
+export async function confirmHandwritingPage(
+  page: File,
+  writerName: string,
+  confirmations: Record<string, string>,
+): Promise<ConfirmedProfileResult> {
+  const form = new FormData();
+  form.append("page", page);
+  form.append("writer_name", writerName);
+  form.append("confirmations", JSON.stringify(confirmations));
+  return readJson<ConfirmedProfileResult>(await fetch(`${API_BASE}/analyze/handwriting/confirm`, {
+    method: "POST",
+    body: form,
+  }));
+}
