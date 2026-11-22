@@ -1,0 +1,21 @@
+# Research-only HWT feasibility experiment
+
+**Status:** an isolated CPU feasibility trial of the public Handwriting Transformers (HWT) generator succeeded. This is research evidence that one writer-conditioned image generator can run locally; it does **not** establish teacher-specific fidelity, exact text accuracy, full lesson-note rendering, or commercial rights. No teacher sample or private data was used. The model is not integrated into the application.
+
+## What was tested
+
+On 22 November 2026, an isolated harness used the author's HWT Space at pinned revision `d514607a9bc07bb270ff04c582a84c7c104c5a7b`, the corresponding public IAM-named checkpoint, and the author's public example images for styles 1 and 10. The checkpoint SHA-256 matched the pointer in that pinned repository. The target phrase, “Zebras quietly waltz.”, was new relative to the visible example image filenames; whether it occurred in training was not checked. The generated outputs were nonblank and mostly readable, but there was no independent recognition or similarity assessment. Changing the reference images changed the generated output; this does not prove that the respective writer was reproduced.
+
+The generator and page compositor ran offline on CPU with batch size 1 and two threads. For the short three-word phrase, measured generator/page assembly time was about 0.52 seconds and peak process memory about 761–764 MiB. Full process time, including imports and initialization, was about 4.9–8.3 seconds. These are two single trials, not a cold-start, concurrency, or long-document benchmark. The output is a raster image, not pen trajectories. The reference loader sampled 15 inputs with replacement, selecting only 9 distinct paths in each run; some examples were noisy, and two style-1 files were identical.
+
+## Important technical and security limits
+
+The declared alphabet includes a percent sign that indexes out of bounds in the tested generator. Unsupported examples such as `@` and `é` fail. Other input characters were not exhaustively tested. A production adapter would need strict, explicit preflight for every character and safe handling of word/page limits. The upstream preprocessing can truncate excessively wide reference images; input dimensions and content need independent validation. The public demo's ordinary checkpoint loader is not copied into this project; the isolated experiment used `torch.load(..., weights_only=True)` with PyTorch 2.10.0, strict state loading, CPU-only execution and no unsafe fallback. This reduces risk but is not a complete hostile-code sandbox. Do not load untrusted model weights or images in a privileged process.
+
+The upstream repository's MIT code license does not settle the checkpoint or generated-output rights. Its demo is marked for research purposes, the checkpoint's commercial rights are unresolved, and IAM database terms limit that data to non-commercial research. Obtain explicit permission and verify data provenance before distribution, commercial use, or production integration. Do not automatically download weights or add model dependencies to the app.
+
+## Decision
+
+The experiment supports only the feasibility of an **optional, isolated, local research prototype** after rights, sample consent, privacy, bounded input, supported-character, and packaging questions are addressed. It does not replace teacher handwriting samples or blinded assessment. Rank 1 remains open until real teacher samples, held-out exact transcriptions, and independent comparison against genuine and generic baselines demonstrate the required outcome.
+
+Sources: [HWT repository at tested revision](https://huggingface.co/spaces/ankankbhunia/HWT/tree/d514607a9bc07bb270ff04c582a84c7c104c5a7b), [model implementation](https://huggingface.co/spaces/ankankbhunia/HWT/blob/d514607a9bc07bb270ff04c582a84c7c104c5a7b/models/model.py), [demo and research-use statement](https://huggingface.co/spaces/ankankbhunia/HWT/blob/d514607a9bc07bb270ff04c582a84c7c104c5a7b/app.py), [checkpoint](https://huggingface.co/spaces/ankankbhunia/HWT/blob/d514607a9bc07bb270ff04c582a84c7c104c5a7b/files/iam_model.pth), [IAM database terms](https://fki.tic.heia-fr.ch/databases/iam-handwriting-database). Full experiment logs and generated example images were stored under a temporary research directory and are not project artifacts.

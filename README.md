@@ -4,7 +4,7 @@
 
 A Python/FastAPI lesson-note tool and teacher-facing web interface for Nigerian senior secondary Digital Technologies. It provides curriculum browsing, prepared lesson notes where available, curriculum outlines and prompts for other weeks, and ruled printable PDFs.
 
-> **Readiness note:** the repository now includes a trajectory-based unseen-handwriting generation engine in `renderer/stroke_handwriting.py`. It is not a conventional font wrapper: it composes new text from pen trajectories with writer variation and cursive joins. Teacher-specific identity still requires verified trajectories extracted from real samples; the existing worksheet/PDF path remains separately documented.
+> **Readiness note:** convincing teacher-specific generation of unseen handwriting is not yet established. The legacy stroke renderer uses generic fallback shapes, synthetic joins, and may truncate long lines; the existing worksheet PDF path compiles a partial font and uses a conventional fallback. Neither is evidence of authentic teacher handwriting. A separate [experimental sample-backed workflow](docs/EXPERIMENTAL_WRITER_PDF.md) rejects missing characters rather than substituting fonts, but it reconstructs static ink rather than learning natural handwriting and has not been validated on a teacher's samples.
 
 ## Quick start
 
@@ -74,7 +74,9 @@ The CI workflow also builds the Docker image and smoke-tests the API. Green unit
 
 - [Teacher guide](docs/TEACHER_GUIDE.md)
 - [Handwriting feature status and architecture](docs/OPEN_HANDWRITING_RECOGNITION.md)
-- [Authentic stroke-handwriting generation](docs/STROKE_HANDWRITING_GENERATION.md)
+- [Legacy and experimental stroke-handwriting prototypes](docs/STROKE_HANDWRITING_GENERATION.md)
+- [Experimental sample-backed PDF workflow](docs/EXPERIMENTAL_WRITER_PDF.md)
+- [Research-only HWT feasibility results](docs/RESEARCH_HWT_FEASIBILITY.md)
 - [Writer-style learning and reconstruction](docs/WRITER_STYLE_LEARNING.md)
 - [Character extraction and alignment](docs/CHARACTER_EXTRACTION_ALIGNMENT.md)
 - [Handwritten-text recognition](docs/HANDWRITTEN_TEXT_RECOGNITION.md)

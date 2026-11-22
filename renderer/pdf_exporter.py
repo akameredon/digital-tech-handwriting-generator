@@ -94,11 +94,28 @@ class ClassmatePDFExporter:
                     color: Color = black) -> float:
         c.setFillColor(color)
         cursor = x
+        if not text:
+            return cursor
+
+        # Keep font changes in one text object so extractors do not split words
+        # across separate text objects, even when a word uses fallback glyphs.
+        text_object = c.beginText(x, y)
+        run_font = None
+        run_chars = []
         for char in text:
             font = self._font_for(char)
-            c.setFont(font, size)
-            c.drawString(cursor, y, char)
+            if run_chars and font != run_font:
+                text_object.setFont(run_font, size)
+                text_object.textOut("".join(run_chars))
+                run_chars = []
+            run_font = font
+            run_chars.append(char)
             cursor += pdfmetrics.stringWidth(char, font, size)
+        text_object.setFont(run_font, size)
+        text_object.textOut("".join(run_chars))
+        c.drawText(text_object)
+        # Match the canvas font state left by the previous per-character calls.
+        c.setFont(run_font, size)
         return cursor
 
     def _wrap(self, text: str, max_width: float, size: float) -> List[str]:
