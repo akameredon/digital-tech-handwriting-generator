@@ -127,7 +127,7 @@ def _assert_a4_portrait_pdf(path: Path) -> PdfReader:
     page = reader.pages[0]
     assert abs(float(page.mediabox.width) - A4[0]) < 1.0
     assert abs(float(page.mediabox.height) - A4[1]) < 1.0
-    extracted = "\\n".join(item.extract_text() or "" for item in reader.pages)
+    extracted = "\n".join(item.extract_text() or "" for item in reader.pages)
     assert extracted.strip()
     assert "Week 2" in extracted
     return reader
