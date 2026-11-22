@@ -79,6 +79,13 @@ class WriterProfileStore:
             label: [[tuple(point) for point in stroke] for stroke in strokes]
             for label, strokes in profile.strokes.items()
         }
+        profile.variants = {
+            label: [
+                [[tuple(point) for point in stroke] for stroke in glyph]
+                for glyph in variants
+            ]
+            for label, variants in profile.variants.items()
+        }
         corrections = [CorrectionEvent(**item) for item in data.get("corrections", [])]
         return ManagedWriterProfile(
             profile,
@@ -147,6 +154,8 @@ class WriterProfileStore:
 
         for label, strokes in learning.profile.strokes.items():
             managed.profile.strokes.setdefault(label, []).extend(strokes)
+        for label, variants in learning.profile.variants.items():
+            managed.profile.variants.setdefault(label, []).extend(variants)
         for label, incoming in learning.evidence.items():
             existing = managed.evidence.get(label)
             if not existing:

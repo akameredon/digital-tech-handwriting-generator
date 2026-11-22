@@ -177,10 +177,15 @@ class WriterStyleLearner:
                 continue
 
         # Pick the highest-quality variant as the primary trajectory. Keep extra
-        # variants available for a later stochastic variant selector.
+        # variants available to the renderer's seeded variant selector.
         strokes = {label: [variants[0]] for label, variants in by_label.items() if variants}
+        glyph_variants = {
+            label: [[trajectory] for trajectory in variants]
+            for label, variants in by_label.items()
+            if variants
+        }
         stats = self._style_stats(accepted_samples)
-        profile = WriterProfile(name=writer_name, strokes=strokes, **stats)
+        profile = WriterProfile(name=writer_name, strokes=strokes, variants=glyph_variants, **stats)
         coverage = {label: len(variants) for label, variants in sorted(by_label.items())}
         evidence: Dict[str, Dict[str, Any]] = {}
         for label in sorted(by_label):

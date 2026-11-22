@@ -36,6 +36,16 @@ def test_learns_trajectory_profile_and_reports_incomplete_coverage():
     }
 
 
+def test_repeated_samples_are_available_as_distinct_seedable_variants():
+    result = WriterStyleLearner(required_characters="a").fit([
+        VerifiedGlyphSample("a", glyph_image("a"), source="page-1"),
+        VerifiedGlyphSample("a", glyph_image("b"), source="page-2"),
+    ])
+
+    assert len(result.profile.variants["a"]) == 2
+    assert result.profile.glyph("a", variant_index=0) != result.profile.glyph("a", variant_index=1)
+
+
 def test_low_confidence_samples_are_not_used_as_identity():
     result = WriterStyleLearner(required_characters="ab").fit([
         VerifiedGlyphSample("a", glyph_image(), confidence=0.99),
@@ -65,6 +75,7 @@ def test_profile_store_merges_new_verified_variants_and_evidence(tmp_path):
 
     store.merge_learning(managed, second)
     assert len(managed.profile.strokes["a"]) == 2
+    assert len(managed.profile.variants["a"]) == 2
     assert managed.evidence["a"]["sample_count"] == 2
     assert managed.evidence["a"]["sources"] == ["page-1", "page-2"]
     assert managed.approved is False
@@ -72,3 +83,4 @@ def test_profile_store_merges_new_verified_variants_and_evidence(tmp_path):
     store.save(managed)
     reloaded = store.load("learned-writer")
     assert reloaded.evidence["a"]["sample_count"] == 2
+    assert len(reloaded.profile.variants["a"]) == 2

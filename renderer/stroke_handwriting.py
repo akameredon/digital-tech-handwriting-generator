@@ -74,6 +74,9 @@ class WriterProfile:
     connect: float = 0.82
     ink: Tuple[int,int,int] = (32, 45, 63)
     strokes: Dict[str, List[Stroke]] = field(default_factory=dict)
+    # Optional repeated observations. Each variant is a complete glyph made
+    # from one or more pen strokes; ``strokes`` remains the legacy primary glyph.
+    variants: Dict[str, List[List[Stroke]]] = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: str | Path) -> "WriterProfile":
@@ -85,6 +88,14 @@ class WriterProfile:
                 label: [[tuple(point) for point in stroke] for stroke in strokes]
                 for label, strokes in fields['strokes'].items()
             }
+        if 'variants' in fields:
+            fields['variants'] = {
+                label: [
+                    [[tuple(point) for point in stroke] for stroke in glyph]
+                    for glyph in variants
+                ]
+                for label, variants in fields['variants'].items()
+            }
         return cls(**fields)
 
     def save(self, path: str | Path) -> None:
@@ -93,7 +104,11 @@ class WriterProfile:
         data['strokes'] = self.strokes
         Path(path).write_text(json.dumps(data, indent=2))
 
-    def glyph(self, ch: str) -> List[Stroke]:
+    def glyph(self, ch: str, variant_index: int | None = None) -> List[Stroke]:
+        variant_key = ch if ch in self.variants else ch.lower()
+        if variant_index is not None and variant_key in self.variants and self.variants[variant_key]:
+            variants = self.variants[variant_key]
+            return variants[variant_index % len(variants)]
         if ch in self.strokes: return self.strokes[ch]
         if ch.lower() in self.strokes: return self.strokes[ch.lower()]
         if ch in DIGITS: return DIGITS[ch]
@@ -161,7 +176,10 @@ class HandwritingRenderer:
                 size=em*(1+self.rng.uniform(-self.profile.size_jitter,self.profile.size_jitter))
                 y=baseline-self.rng.uniform(-self.profile.baseline_jitter,self.profile.baseline_jitter)
                 skew=self.profile.slant+self.rng.uniform(-.035,.035)
-                glyph=self.profile.glyph(ch)
+                variant_key = ch if ch in self.profile.variants else ch.lower()
+                variants = self.profile.variants.get(variant_key, ())
+                variant_index = self.rng.randrange(len(variants)) if variants else None
+                glyph=self.profile.glyph(ch, variant_index=variant_index)
                 first=None; last=None
                 for stroke in glyph:
                     transformed=[self._transform(p,x,y-size,size,skew) for p in stroke]

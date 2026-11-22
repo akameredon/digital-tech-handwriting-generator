@@ -19,6 +19,6 @@ result.profile.save("mrs-okafor.json")
 print(result.public_dict())
 ```
 
-Repeated samples of the same character are counted as variants. The primary trajectory is selected conservatively and the coverage metadata remains available for a future stochastic variant selector. Each learning result also records per-glyph sample count, mean confidence, and evidence sources.
+Repeated samples of the same character are retained as complete glyph variants. The renderer selects them with its seeded random generator, so repeated lesson renders can vary naturally while remaining reproducible for a given seed. Each learning result also records per-glyph sample count, mean confidence, and evidence sources.
 
 `WriterProfileStore.merge_learning()` adds later confirmed variants without replacing earlier evidence, combines confidence metadata, marks the profile unapproved again, and persists the updated version atomically. This is the progressive-profile path used by the natural-page confirmation endpoint. Unobserved characters remain absent and continue to use the renderer's explicit fallback trajectory.
