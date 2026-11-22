@@ -2,9 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, feat/group-1-foundation-audit ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -70,6 +71,28 @@ jobs:
           curl -fsS http://127.0.0.1:8000/ | grep -q "Digital Technologies Lesson Studio"
           curl -fsS "http://127.0.0.1:8000/topics?class_level=SS2" >/dev/null
           curl -fsS http://127.0.0.1:8000/health
+
+      - name: Validate published OpenAPI contract
+        run: |
+          python - <<'PY'
+          from main import app
+          schema = app.openapi()
+          paths = schema["paths"]
+          required = {
+              "/health": {"get"},
+              "/topics": {"get"},
+              "/lesson/{class_level}/{term}/{week}": {"get"},
+              "/prompt/{class_level}/{term}/{week}": {"get"},
+              "/export/lesson-pdf": {"post"},
+              "/handwriting/calibration-sheet": {"get"},
+              "/export/handwriting-pdf": {"post"},
+          }
+          for path, methods in required.items():
+              assert path in paths, f"Missing OpenAPI path: {path}"
+              actual = {method.lower() for method in paths[path]}
+              assert methods <= actual, f"{path}: expected {methods}, got {actual}"
+          print(f"OpenAPI contract OK: {len(required)} required paths")
+          PY
 
       - name: Run complete Python test suite
         run: python -m pytest tests/ -v
