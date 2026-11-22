@@ -343,7 +343,7 @@ function App() {
 
           {section === "handwriting" && (
             <>
-              <div className="page-heading"><div className="eyebrow"><span className="eyebrow-line" /> HANDWRITING WORKFLOW</div><h1>Try an optional handwriting-style PDF.</h1><p>This controlled worksheet path uses only the labeled character boxes you fill in. Natural notebook-page recognition is still in development.</p></div>
+              <div className="page-heading"><div className="eyebrow"><span className="eyebrow-line" /> HANDWRITING WORKFLOW</div><h1>Create a handwriting-style lesson PDF.</h1><p>This experimental handwriting workflow builds a partial personal font from a generated, labeled worksheet. Natural notebook-page recognition is not supported.</p></div>
               <section className="panel">
                 <div className="panel-heading"><div><span className="step-kicker">STEP 01 · CHOOSE A LESSON</span><h2>Choose the note for your PDF</h2><p>The regular printable PDF remains available without a worksheet or handwriting sample.</p></div></div>
                 <div className="form-grid">
@@ -355,14 +355,14 @@ function App() {
                   <div className="topic-symbol" aria-hidden="true">↗</div>
                   <div className="topic-copy"><span>LESSON CONTENT</span><strong>{loadingTopics ? "Loading curriculum…" : selectedTopic?.topic ?? "Topic not available"}</strong><p>{selectedTopic?.content ?? "Choose another week or check your connection."}</p></div>
                 </div>
-                <div className="callout"><strong>Important limitation</strong><p>This optional worksheet labels characters by their printed boxes. Do not upload an ordinary notebook page here; it will be rejected rather than positionally mislabeled. Missing characters in the PDF use standard text.</p></div>
+                <div className="callout"><strong>What this workflow does—and does not do</strong><p>The worksheet is the required input for this experimental handwriting path. Character labels come from the printed boxes, with your confirmation; an ordinary notebook page is not recognized and will be rejected. Missing characters in the PDF use standard text. The regular printable PDF remains available separately without a handwriting sample.</p></div>
               </section>
               <section className="panel">
-                <div className="panel-heading"><div><span className="step-kicker">STEP 02 · OPTIONAL WORKSHEET</span><h2>Print, write and scan</h2><p>Fill the printed boxes with dark ink. Scan the full A4 landscape page upright as a JPG or PNG.</p></div><span className="panel-icon">02</span></div>
+                <div className="panel-heading"><div><span className="step-kicker">STEP 02 · REQUIRED WORKSHEET</span><h2>Print, write and scan</h2><p>For this handwriting workflow, fill the printed boxes with dark ink. Scan the full A4 landscape page upright as a JPG or PNG.</p></div><span className="panel-icon">02</span></div>
                 <div className="panel-actions">
-                  <span className="helper-text">Optional calibration sheet · A4 landscape · JPG/PNG scan</span>
+                  <span className="helper-text">Required for this handwriting workflow · A4 landscape · JPG/PNG scan</span>
                   <button className="button button-secondary" onClick={getCalibrationSheet} disabled={downloadingCalibration}>
-                    {downloadingCalibration ? "Preparing worksheet…" : "Download optional worksheet"} <span aria-hidden="true">↓</span>
+                    {downloadingCalibration ? "Preparing worksheet…" : "Download handwriting worksheet"} <span aria-hidden="true">↓</span>
                   </button>
                 </div>
               </section>
@@ -414,7 +414,7 @@ function App() {
               <section className="panel help-list">
                 <HelpItem title="How do I find my topic?" body="Choose your class, term and week. The curriculum topic and its content summary appear automatically." />
                 <HelpItem title="Why does my lesson say “Curriculum outline”?" body="A full prepared lesson note is not available for every week yet. You can copy a curriculum-aligned prompt and use it in your preferred AI tool." />
-                <HelpItem title="Can I create a handwriting-style PDF?" body="There is an optional controlled worksheet path. It labels only the generated worksheet's character boxes and uses standard text for missing characters. It does not recognize ordinary notebook pages. A standard printable PDF is available without the worksheet." />
+                <HelpItem title="How does the handwriting-style PDF work?" body="The handwriting workflow uses a generated, labeled worksheet as its required input. It compiles a partial font from characters in those boxes after you confirm the labels, then uses standard text for unsupported characters. It does not recognize arbitrary notebook pages or perform handwriting OCR. A regular printable PDF is available separately without a handwriting sample." />
                 <HelpItem title="Where does my printable PDF go?" body="Your browser downloads the generated PDF to its normal downloads location. The server writes the file to a temporary directory and removes it after sending the response." />
               </section>
             </>
