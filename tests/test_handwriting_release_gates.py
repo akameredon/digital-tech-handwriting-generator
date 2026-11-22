@@ -3,6 +3,7 @@ from pathlib import Path
 import sys
 import numpy as np
 import pytest
+from fontTools.ttLib import TTFont as FontToolsTTFont
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -31,10 +32,28 @@ def test_open_extraction_does_not_require_exact_row_counts():
 def test_font_compiler_accepts_partial_glyph_set(tmp_path):
     glyphs = [
         {"label": char, "image": np.ones((20, 12), dtype=np.uint8) * 255, "row": 1}
-        for char in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        for char in "ABCDEFGH"
     ]
     path = FontCompiler().compile(glyphs, tmp_path / "partial.ttf")
     assert path.is_file() and path.stat().st_size > 500
+    with FontToolsTTFont(path) as font:
+        cmap = font.getBestCmap()
+    assert {chr(codepoint) for codepoint in cmap} == set("ABCDEFGH")
+
+    exporter = ClassmatePDFExporter(font_path=str(path))
+    assert exporter._font_for("A") == "TeacherHandwriting"
+    assert exporter._font_for("Z") == "Helvetica"
+    assert exporter._font_for("?") == "Helvetica"
+
+
+def test_font_compiler_rejects_a_partial_set_with_fewer_than_eight_valid_glyphs(tmp_path):
+    glyphs = [
+        {"label": char, "image": np.ones((20, 12), dtype=np.uint8) * 255, "row": 1}
+        for char in "ABCDEFG"
+    ]
+    glyphs.append({"label": "H", "image": np.zeros((20, 12), dtype=np.uint8), "row": 1})
+    with pytest.raises(FontCompilationError, match="Only 7 clear characters"):
+        FontCompiler().compile(glyphs, tmp_path / "too-few.ttf")
 
 
 def test_font_compiler_rejects_almost_empty(tmp_path):

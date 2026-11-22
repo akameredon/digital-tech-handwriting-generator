@@ -1,6 +1,6 @@
 """Build a TrueType font from whatever characters the teacher provided."""
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 import logging
 import numpy as np
 
@@ -87,7 +87,7 @@ class FontCompiler:
         return pen.glyph()
 
     def compile(self, glyphs: List[Dict], output_path: str | Path,
-                family_name: str = "TeacherHandwriting", style_name: str = "Regular") -> Optional[Path]:
+                family_name: str = "TeacherHandwriting", style_name: str = "Regular") -> Path:
         if not FONTTOOLS_AVAILABLE or not OPENCV_AVAILABLE:
             raise FontCompilationError("fontTools and OpenCV are required.")
         if not glyphs:
@@ -106,30 +106,32 @@ class FontCompiler:
                 f"Only {len(by_label)} usable characters found. Write more letters clearly and try again."
             )
 
-        chars = [c for c in PREFERRED_CHARS if c in by_label]
-        for c in PREFERRED_CHARS:
-            if c not in by_label:
-                chars.append(c)
+        glyf = {".notdef": self._simple_box_glyph()}
+        metrics = {".notdef": (550, 50)}
+        chars = []
+        for char in PREFERRED_CHARS:
+            if char not in by_label:
+                continue
+            name = self._glyph_name(char)
+            try:
+                row = int(by_label[char].get("row", 1))
+                glyf[name] = self._image_to_glyph(
+                    by_label[char].get("image"), name, row, metrics
+                )
+                chars.append(char)
+            except FontCompilationError as exc:
+                logger.warning("Skipping unusable handwriting glyph %r: %s", char, exc)
+
+        if len(chars) < 8:
+            raise FontCompilationError(
+                f"Only {len(chars)} clear characters could be compiled. Write at least 8 clearly."
+            )
 
         glyph_order = [".notdef"] + [self._glyph_name(c) for c in chars]
         cmap = {ord(c): self._glyph_name(c) for c in chars}
         fb = FontBuilder(self.units_per_em, isTTF=True)
         fb.setupGlyphOrder(glyph_order)
         fb.setupCharacterMap(cmap)
-
-        glyf = {".notdef": self._simple_box_glyph()}
-        metrics = {".notdef": (550, 50)}
-        for char in chars:
-            name = self._glyph_name(char)
-            if char in by_label:
-                try:
-                    row = int(by_label[char].get("row", 1))
-                    glyf[name] = self._image_to_glyph(by_label[char].get("image"), name, row, metrics)
-                    continue
-                except FontCompilationError:
-                    logger.warning("Skipping faint glyph %r", char)
-            glyf[name] = self._simple_box_glyph()
-            metrics[name] = (550, 50)
 
         fb.setupGlyf(glyf)
         fb.setupHorizontalMetrics(metrics)

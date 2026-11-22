@@ -77,3 +77,40 @@ export async function exportLessonPdf(
     body: form
   }));
 }
+
+export type HandwritingPdfResult = {
+  blob: Blob;
+  coveredCharacters: number;
+  totalCharacters: number;
+  missingCharacters: number;
+};
+
+export async function downloadCalibrationSheet(): Promise<Blob> {
+  return readBlob(await fetch(`${API_BASE}/handwriting/calibration-sheet`));
+}
+
+export async function exportHandwritingPdf(
+  classLevel: string,
+  term: string,
+  week: number,
+  scan: File,
+  confirmLabels: boolean
+): Promise<HandwritingPdfResult> {
+  const form = new FormData();
+  form.append("class_level", classLevel);
+  form.append("term", term);
+  form.append("week", String(week));
+  form.append("calibration_scan", scan);
+  form.append("confirm_labels", String(confirmLabels));
+
+  const response = await fetch(`${API_BASE}/export/handwriting-pdf`, {
+    method: "POST",
+    body: form
+  });
+  const blob = await readBlob(response);
+  const [coveredCharacters, totalCharacters] = (response.headers.get("X-Handwriting-Coverage") ?? "0/77")
+    .split("/")
+    .map((value) => Number(value));
+  const missingCharacters = Number(response.headers.get("X-Handwriting-Missing-Count") ?? totalCharacters);
+  return { blob, coveredCharacters, totalCharacters, missingCharacters };
+}

@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- Added an optional generated handwriting calibration worksheet and a worksheet-only PDF export path with teacher label confirmation.
+- Added partial-font compilation, explicit standard-text fallback for missing characters, and API coverage reporting.
+- Added worksheet validation, arbitrary notebook-page rejection, API integration tests, and research notes for future natural-page HTR work.
+
+### Limitations
+- Natural handwriting recognition and verified natural-page text-to-glyph alignment remain unimplemented; the worksheet path is experimental and does not make the project production-ready.
+
 ## [1.1.2] – 2026-11-19
 
 ### Fixed

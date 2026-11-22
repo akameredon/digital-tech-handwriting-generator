@@ -11,7 +11,8 @@ export default defineConfig({
       "/topics": "http://127.0.0.1:8000",
       "/lesson": "http://127.0.0.1:8000",
       "/prompt": "http://127.0.0.1:8000",
-      "/export": "http://127.0.0.1:8000"
+      "/export": "http://127.0.0.1:8000",
+      "/handwriting": "http://127.0.0.1:8000"
     }
   },
   build: {

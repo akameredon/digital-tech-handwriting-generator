@@ -59,15 +59,15 @@ If the teacher needs a fuller note and only an outline is available, offer **"Co
 
 ### Step 3 — Printable PDF and handwriting status
 
-The supported browser journey downloads a standard ruled PDF from `POST /export/lesson-pdf`. Show a clear loading state, report success only after a PDF response is received, and offer the resulting file for download again.
+The standard browser journey downloads a ruled PDF from `POST /export/lesson-pdf`. The separate experimental worksheet path may return a handwriting-style PDF only after the teacher confirms the worksheet labels. Show a clear loading state, report success only after a PDF response is received, and identify which PDF workflow completed.
 
-Handwriting-to-font export is unavailable. Do not show a handwriting upload control or imply that natural handwriting can be recognized. The legacy `POST /export/handwriting-pdf` endpoint currently returns HTTP 503; enabling it requires explicit integration of a genuine recognizer, verified text-to-image alignment, and real-sample acceptance tests. A fixed worksheet or position-based glyph assignment is not an acceptable substitute.
+Natural-page handwriting-to-font export is unavailable. The interface may offer the experimental, optional generated-worksheet path, but it must state that cell positions label only that sheet and require the teacher to confirm the written character matches each printed label. This confirmation is a self-check, not software verification; do not imply that ordinary notebook pages are recognized. A regular printable PDF must remain available without a worksheet. Enabling natural-page conversion requires a genuine recognizer, verified text-to-image alignment, and real-sample acceptance tests.
 
 ### Step 4 — Completion
 
 Show a calm success state with:
 - Selected lesson details.
-- Standard printable PDF download action, when a PDF was actually returned.
+- Download action for the PDF workflow that actually completed: standard ruled output or optional worksheet-based handwriting-style output.
 - Start another lesson action.
 - A short note explaining where the downloaded file is stored by the browser.
 
@@ -119,7 +119,7 @@ Aim for quiet, precise, premium educational software rather than a flashy AI lan
 - Lesson content renderer.
 - Prepared-note vs curriculum-outline status panel.
 - Copy prompt action with copy confirmation.
-- Handwriting-feature status panel explaining why upload is disabled.
+- Optional worksheet download/upload flow with explicit character-label confirmation and partial-coverage feedback; natural-page recognition remains unavailable.
 - Printable-PDF progress and error/retry panel.
 - PDF download completion panel.
 - Empty, loading, offline and not-found states.

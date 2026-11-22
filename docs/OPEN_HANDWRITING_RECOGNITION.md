@@ -1,94 +1,57 @@
 # Open Handwriting Recognition — Architecture Decision
 
-Status: recognition and text-to-glyph alignment are not implemented. In v1.1.2 the web UI no longer accepts handwriting uploads, and the legacy handwriting-PDF endpoint returns HTTP 503. Standard printable lesson PDFs remain available.
+Status: a controlled, optional worksheet path is implemented for experimental handwriting-style PDFs. Natural-page handwriting recognition and model-based text-to-glyph alignment remain unavailable. This repository is not being presented as production-ready.
 
 ## Product decision
 
-The intended product should eventually accept natural handwriting samples. The current application does not convert handwriting samples into fonts or PDFs. A fixed six-row character sheet, fixed row count, fixed order, and mandatory punctuation row are not suitable substitutes for recognition. The six-row sheet may remain an optional evaluation aid, but it must never be required as the product workflow.
+The intended product should accept natural handwriting samples as its primary handwriting input. The generated worksheet is an optional calibration path only; teachers can still create standard printable lesson PDFs without printing or scanning it. Worksheet cell positions are used only for that generated, labeled sheet, never to assign labels to arbitrary notebook pages.
 
-The uploaded sample is evidence of a writer's style, not a positional character key.
+The worksheet flow asks the teacher to confirm that each written character matches the printed label. That confirmation is a human self-check, not a vision-model verification. A wrong character in a cell can still be mislabeled if the teacher does not catch it. The UI and export response must not describe this as automatic handwriting recognition.
 
 ## Current implementation status
 
-- `main.py` currently returns HTTP 503 for handwriting-to-font requests. Enabling the route requires explicit integration of both a recognizer and a verified text-to-glyph alignment pipeline; configuration alone is not sufficient.
-- The browser no longer uploads handwriting samples. It offers a standard ruled printable PDF instead.
-- `ingestion/open_handwriting.py` contains image-layout analysis and a recognizer contract, but no recognition provider is configured or called by the export route.
-- The legacy positional glyph compiler remains in the repository for isolated development work. It must not be used to label arbitrary natural writing.
+- `GET /handwriting/calibration-sheet` creates a generated A4 landscape worksheet. Its code-marked corners and grid are checked before use.
+- `POST /export/handwriting-pdf` accepts only an image matching that worksheet, requires explicit label confirmation, compiles detected cell crops into a partial font, and creates a lesson PDF. Unsupported characters use Helvetica. The result reports the number of covered characters.
+- The worksheet is optional for the product overall. The ordinary ruled printable-PDF route still needs no handwriting sample.
+- Natural notebook pages are not recognized or accepted by the calibration endpoint. No HTR provider is configured or called from the export route.
+- `ingestion/open_handwriting.py` retains a provider contract and natural-page analysis components, but they do not establish recognition or character-level alignment.
 
-## Historical pipeline risks that motivated disabling export
+## Limits and risks of the worksheet path
 
-- Before v1.1.2, the web route mapped connected components to DEFAULT_SAMPLE_ORDER by position, without recognizing the written characters.
+A printed label plus a known cell location supplies a proposed Unicode identity; it is not proof that the ink in the cell has that shape. The endpoint cannot determine whether the teacher copied the printed label correctly. It rejects unrelated pages and large or crowded cells, but cannot semantically verify every character. The teacher confirmation is therefore necessary, and the generated PDF reports partial coverage. Missing glyphs are omitted from the custom font and rendered with standard text instead of synthetic rectangles.
 
-- The former route passed arbitrary uploaded pages to that positional mapper, despite the UI saying that a natural page was acceptable.
+The historical arbitrary-page positional mapper remains unsuitable for natural writing. Removing row-count checks or labeling components by horizontal position would not solve the absence of recognized Unicode identities.
 
-- The current font compiler fills absent characters with rectangle glyphs and adds them to the font cmap; a successful font build therefore did not prove that glyphs were correctly recognized.
+## Natural-page pipeline still required
 
-- The PDF exporter treats cmap entries as supported, including placeholder rectangle glyphs.
-
-- The former frontend advertised natural handwriting uploads as a working feature.
-
-- The former route could return a generic image-quality error for unexpected pipeline failures, obscuring the cause.
-
-Removing only the row-count check would be unsafe: extracted image components have no Unicode identity unless a recognizer or a human correction supplies it.
-
-## Proposed pipeline
-
-1. Image intake and quality assessment: accept a full notebook page, exercise-book page, or multiple natural handwriting lines. Correct orientation and perspective where possible; estimate blur, exposure, crop, and resolution. Return actionable quality guidance without requiring a prescribed layout.
-
-2. Layout analysis: detect page regions, text lines, word regions, and line bounding boxes. Treat notebook ruling and shadows as image artefacts, not character rows. Preserve coordinates so recognizer output can be linked back to source crops.
-
-3. Handwritten text recognition: put recognition behind a provider interface returning text, region geometry, confidence, and model metadata. Evaluate Kraken for line segmentation plus HTR and TrOCR handwritten for line-crop recognition. TrOCR is line-level, so it requires a preceding line detector. Benchmark on real teacher handwriting, including supplied IMG_3492, before selecting a default. Do not use generic printed-text OCR or x-position to assign character labels.
-
-4. Writer profile and glyph evidence: align recognized text with image regions; use character alignment only when defensible offsets or a correction workflow supplies them. Store glyph observations with Unicode label, crop, confidence, source region, and provenance. Aggregate multiple examples of the same character; retain variants. Never turn an uncertain OCR guess into a confirmed glyph.
-
-5. Progressive font generation: compile fonts from the observed, confirmed subset rather than requiring a complete fixed alphabet. Build a valid .notdef glyph and cmap only for confirmed characters. Use explicit fallback for missing characters in the PDF and tell the teacher which characters were not represented by their sample. Do not claim synthetic or fallback glyphs are the teacher's handwriting.
-
-6. Teacher correction: present only low-confidence words/characters for review. Corrections update text-to-image alignment and writer profile. A single uncertain character must not invalidate the entire upload.
-
-7. PDF rendering: use personalized glyphs wherever supported and explicit fallback elsewhere. Preserve wrapping, punctuation, line spacing, page boundaries, and notebook appearance. Render every page to images for regression inspection.
+1. Assess full notebook pages or handwriting lines for orientation, crop, blur, exposure, and resolution without requiring a prescribed layout.
+2. Detect page regions, text lines, word regions, and bounding boxes while treating notebook ruling and shadows as image artifacts.
+3. Put HTR behind a provider interface that returns recognized text, region geometry, confidence, and model metadata. Evaluate Kraken for line segmentation and HTR, and TrOCR for line-crop recognition. TrOCR needs a separate line detector and neither candidate alone guarantees character geometry.
+4. Align text with image regions. Persist glyph observations only when Unicode labels and crops are defensible or confirmed through correction. Preserve confidence, source coordinates, and provenance.
+5. Compile only observed and confirmed glyphs. Use explicit fallback for missing characters and tell the teacher which characters were not represented.
+6. Localize uncertainty for teacher correction instead of silently turning an OCR guess into a font glyph.
+7. Render every PDF page for layout and visual regression checks.
 
 ## Model and hosting constraints
 
-No HTR model/provider is currently configured in the repository. Render is on the free service tier, so a large transformer must not be loaded into the production web process without memory/latency measurements.
+No HTR model/provider is configured. A large model must not be loaded into the free Render web process without memory and latency measurements. A lightweight CPU-first model or separate worker may be needed. Do not add a paid OCR service, external provider dependency, new hosting spend, or production model download without approval.
 
-Candidate references for evaluation:
+Candidate references for evaluation are Kraken HTR, TrOCR handwritten, and the TrOCR paper. Research notes and implementation sources are recorded in [HTR_RESEARCH_NOTES.md](HTR_RESEARCH_NOTES.md).
 
-- Kraken HTR: https://github.com/mittagessen/kraken
+## API direction
 
-- TrOCR handwritten: https://huggingface.co/microsoft/trocr-base-handwritten
+The worksheet API is intentionally narrow: generated-sheet input, explicit `confirm_labels`, validated crops, and a coverage/fallback result. A natural-page API should not be enabled until it can return recognized text, regions with page coordinates and transcription, uncertain regions with confidence/correction state, confirmed/observed/missing glyph coverage, a readiness status, and explicit fallback warnings.
 
-- TrOCR paper: https://arxiv.org/abs/2109.10282
+Return specific 4xx errors for unsupported or unreadable scans. Log unexpected failures with a correlation ID and traceback while returning a safe user message.
 
-A lightweight CPU-first HTR model or separate worker may be necessary. Keep the app usable if recognition is unavailable: explain the limitation and do not fall back to the old fixed-template rejection path. Do not add a paid OCR API, external service dependency, or new hosting spend without approval.
+## Acceptance status
 
-## API contract direction
-
-Replace the implicit all-or-nothing font build with a structured result containing recognized_text; regions with page coordinates and transcription; uncertain_regions with confidence and correction state; glyph_coverage with observed/confirmed/missing character sets; font_status (ready_partial, needs_correction, or recognition_unavailable); and warnings describing fallback glyph use.
-
-Return specific 4xx errors only for genuinely unreadable/unsupported uploads. Log unexpected server failures with a correlation ID and traceback; return a safe message that does not misdiagnose software failures as bad handwriting.
-
-## Acceptance gates
-
-- Supplied IMG_3492 image is accepted for natural-layout analysis without a six-row-template check.
-
-- Varied notebook pages, line counts, spacing, ruling, and mixed case are accepted.
-
-- Recognition is evaluated against human transcription; report character/word error rates.
-
-- No positional label assignment is allowed.
-
-- Ambiguity is localized for correction; no silent wrong mappings.
-
-- Partial fonts compile and PDF fallback is explicit.
-
-- Tests cover cmap, glyph shape/proportion, punctuation, line wrapping, page boundaries, and multiple pages.
-
-- CI renders generated PDF pages to images and runs visual regression checks.
-
-- iPhone upload, correction, generation, download, and reopening the PDF are tested end to end.
-
-- Production deploy waits for passing gates and a measured memory/latency profile compatible with the free tier.
+- Partial font compilation and omission of unsupported cmap entries are implemented and tested.
+- PDF fallback to standard text and coverage reporting are implemented and tested.
+- Generated worksheet layout, orientation markers, grid validation, arbitrary-page rejection, and teacher label confirmation are tested.
+- Recognition on the supplied `IMG_3492`, varied natural notebook layouts, human-ground-truth character/word error rates, correction UI, iPhone end-to-end use, PDF visual regression, and free-tier memory/latency measurements remain open.
+- Production deployment must wait for natural-page release gates and measured resource use. The optional worksheet does not satisfy those gates.
 
 ## Explicit non-goal
 
-Do not make a rigid template the required way to use D.Lesson Studio. An optional calibration worksheet may improve coverage, but ordinary handwriting must remain the primary supported input.
+Do not make a rigid template a requirement for ordinary D.Lesson Studio use. An optional worksheet can provide a controlled, teacher-confirmed sample for the experimental font path, but ordinary natural handwriting remains the intended input for a future complete recognition feature.

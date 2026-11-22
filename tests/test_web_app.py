@@ -6,7 +6,7 @@ import pytest
 from fastapi import HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 
-from main import app, build_lesson_payload, export_handwriting_pdf, get_lesson_note, get_topics, home
+from main import app, build_lesson_payload, get_lesson_note, get_topics, home
 
 
 def test_existing_and_new_web_routes_are_available():
@@ -16,6 +16,7 @@ def test_existing_and_new_web_routes_are_available():
     assert "/lesson/{class_level}/{term}/{week}" in paths
     assert "/prompt/{class_level}/{term}/{week}" in paths
     assert "/export/lesson-pdf" in paths
+    assert "/handwriting/calibration-sheet" in paths
     assert "/export/handwriting-pdf" in paths
 
 
@@ -58,11 +59,3 @@ def test_root_serves_compiled_frontend_when_build_exists():
         assert isinstance(response, (HTMLResponse, str))
         body = response.body.decode() if isinstance(response, HTMLResponse) else response
         assert "Digital Technologies" in body or "Lesson" in body
-
-
-def test_handwriting_export_refuses_to_return_a_falsely_labeled_font():
-    with pytest.raises(HTTPException) as exc:
-        asyncio.run(export_handwriting_pdf())
-    assert exc.value.status_code == 503
-    assert "recognizer" in exc.value.detail
-    assert "printable lesson PDF" in exc.value.detail
