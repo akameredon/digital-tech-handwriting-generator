@@ -9,6 +9,8 @@ import pytest
 from fastapi import HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from reportlab.pdfbase import pdfmetrics
+from reportlab.lib.pagesizes import A4
+from pypdf import PdfReader
 
 from main import (
     MAX_HANDWRITING_REQUEST_BYTES,
@@ -17,6 +19,7 @@ from main import (
     export_handwriting_pdf,
 )
 from test_calibration_sheet import _make_calibration_image
+from ingestion.calibration_sheet import CalibrationSheetError
 
 
 def _encoded_scan(image: np.ndarray) -> bytes:
@@ -105,6 +108,52 @@ def test_export_rejects_arbitrary_notebook_image_with_specific_client_error():
     assert "full landscape worksheet" in exc.value.detail or "generated calibration sheet" in exc.value.detail
 
 
+@pytest.mark.parametrize("pillow_pixel_limit", [100, 300])
+def test_decompression_bomb_images_return_actionable_validation_error(monkeypatch, pillow_pixel_limit):
+    import ingestion.calibration_sheet as calibration_sheet
+
+    image = np.full((20, 20, 3), 255, dtype=np.uint8)
+    ok, encoded = cv2.imencode(".png", image)
+    assert ok
+    monkeypatch.setattr(calibration_sheet.Image, "MAX_IMAGE_PIXELS", pillow_pixel_limit)
+
+    with pytest.raises(CalibrationSheetError, match="safe size limit"):
+        calibration_sheet.extract_calibration_glyphs(encoded.tobytes())
+
+
+def _assert_a4_portrait_pdf(path: Path) -> PdfReader:
+    reader = PdfReader(str(path))
+    assert len(reader.pages) >= 1
+    page = reader.pages[0]
+    assert abs(float(page.mediabox.width) - A4[0]) < 1.0
+    assert abs(float(page.mediabox.height) - A4[1]) < 1.0
+    extracted = "\\n".join(item.extract_text() or "" for item in reader.pages)
+    assert extracted.strip()
+    assert "Week 2" in extracted
+    return reader
+
+
+def _has_embedded_truetype_font(reader: PdfReader) -> bool:
+    for page in reader.pages:
+        resources = page.get("/Resources")
+        if not resources:
+            continue
+        fonts = resources.get_object().get("/Font")
+        if not fonts:
+            continue
+        for font_ref in fonts.get_object().values():
+            font = font_ref.get_object()
+            descriptor = font.get("/FontDescriptor")
+            if descriptor and descriptor.get_object().get("/FontFile2"):
+                return True
+            for descendant_ref in font.get("/DescendantFonts", []):
+                descendant = descendant_ref.get_object()
+                descendant_descriptor = descendant.get("/FontDescriptor")
+                if descendant_descriptor and descendant_descriptor.get_object().get("/FontFile2"):
+                    return True
+    return False
+
+
 def test_export_requires_teacher_to_confirm_worksheet_labels():
     upload = UploadFile(file=BytesIO(_encoded_scan(_make_calibration_image())), filename="worksheet.png")
     with pytest.raises(HTTPException) as exc:
@@ -126,7 +175,9 @@ def test_optional_worksheet_export_returns_pdf_with_coverage_and_fallback_header
     assert response.headers["x-handwriting-coverage"] == "77/77"
     assert response.headers["x-handwriting-missing-count"] == "0"
     assert response.headers["x-handwriting-fallback"] == "Helvetica"
-    assert Path(response.path).read_bytes().startswith(b"%PDF-")
+    reader = _assert_a4_portrait_pdf(Path(response.path))
+    assert reader.metadata.title and "SS2 Second Term Week 2" in reader.metadata.title
+    assert _has_embedded_truetype_font(reader), "the generated teacher font must be embedded in the PDF"
     assert set(pdfmetrics._fonts) == fonts_before
     assert set(pdfmetrics._dynFaceNames) == faces_before
     asyncio.run(response.background())
