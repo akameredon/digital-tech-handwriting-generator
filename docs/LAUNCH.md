@@ -1,5 +1,7 @@
 # Release readiness
 
+See the detailed [launch status matrix](LAUNCH_STATUS.md) for green, amber, and red items with required owners and inputs.
+
 ## Current status
 
 The curriculum, lesson-note, standard printable-PDF, teacher web interface, and natural-page handwriting engineering paths are present in the repository. The core application can be launched as a curriculum and printable lesson service.

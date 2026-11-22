@@ -93,6 +93,7 @@ The CI workflow also builds the Docker image and smoke-tests the API. Green unit
 - [Optional worksheet instructions](docs/SAMPLE_SHEET_INSTRUCTIONS.md)
 - [HTR research notes and sources](docs/HTR_RESEARCH_NOTES.md)
 - [Launch readiness checklist](docs/LAUNCH.md)
+- [Launch status matrix](docs/LAUNCH_STATUS.md)
 - [Changelog](CHANGELOG.md)
 
 ## License
