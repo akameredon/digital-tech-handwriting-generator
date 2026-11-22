@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import WorksheetScanUpload from "./WorksheetScanUpload";
 import {
   downloadCalibrationSheet,
   exportLessonPdf,
@@ -368,32 +369,19 @@ function App() {
               </section>
               <section className="panel">
                 <div className="panel-heading"><div><span className="step-kicker">STEP 03 · CREATE PDF</span><h2>Upload the completed worksheet</h2><p>Only characters found inside their labeled cells are compiled into the partial font.</p></div><span className="panel-icon">03</span></div>
-                <label className="upload-box">
-                  <span className="upload-symbol" aria-hidden="true">↑</span>
-                  <span className="upload-copy"><strong>{handwritingScan?.name ?? "Choose a worksheet scan"}</strong><small>JPG or PNG, full page, upright, under 12 MB</small></span>
-                  <span className="button button-secondary upload-button" aria-hidden="true">Browse files</span>
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png"
-                    aria-label="Choose a full-page calibration worksheet scan"
-                    aria-describedby="calibration-scan-help"
-                    onChange={(event) => {
-                      clearFeedback();
-                      handwritingRequestId.current += 1;
-                      setExportingHandwriting(false);
-                      const file = event.target.files?.[0] ?? null;
-                      if (file && file.size > 12 * 1024 * 1024) {
-                        setHandwritingScan(null);
-                        setLabelsConfirmed(false);
-                        setError("The scan must be smaller than 12 MB. Choose a smaller JPG or PNG file.");
-                      } else {
-                        setHandwritingScan(file);
-                        setLabelsConfirmed(false);
-                      }
-                    }}
-                  />
-                </label>
-                <p className="sample-help" id="calibration-scan-help">The scan is processed for this request only and is not kept as a teacher profile.</p>
+                <WorksheetScanUpload
+                  file={handwritingScan}
+                  disabled={exportingHandwriting}
+                  onFileChange={(file) => {
+                    clearFeedback();
+                    handwritingRequestId.current += 1;
+                    setExportingHandwriting(false);
+                    setHandwritingScan(file);
+                    setLabelsConfirmed(false);
+                  }}
+                  onError={(message) => { setError(message); setNotice(""); }}
+                />
+                <p className="sample-help" id="calibration-scan-help">Your scan is sent only when you request this PDF, processed for that request, and not saved as a reusable teacher handwriting profile.</p>
                 <label className="confirmation-check">
                   <input type="checkbox" checked={labelsConfirmed} onChange={(event) => { handwritingRequestId.current += 1; setExportingHandwriting(false); setLabelsConfirmed(event.target.checked); }} />
                   <span>I checked the scan: every written character matches the printed label in its box.</span>
