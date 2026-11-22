@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
+  analyzeNaturalPage,
   downloadCalibrationSheet,
   exportLessonPdf,
   exportHandwritingPdf,
@@ -8,6 +9,7 @@ import {
   getPrompt,
   getTopics,
   type Lesson,
+  type NaturalPageAnalysis,
   type Topic
 } from "./api";
 
@@ -26,6 +28,10 @@ function App() {
   const [pdfUrl, setPdfUrl] = useState("");
   const [exportingPdf, setExportingPdf] = useState(false);
   const [handwritingScan, setHandwritingScan] = useState<File | null>(null);
+  const [naturalPage, setNaturalPage] = useState<File | null>(null);
+  const [naturalPagePreview, setNaturalPagePreview] = useState("");
+  const [naturalAnalysis, setNaturalAnalysis] = useState<NaturalPageAnalysis | null>(null);
+  const [analyzingNaturalPage, setAnalyzingNaturalPage] = useState(false);
   const [labelsConfirmed, setLabelsConfirmed] = useState(false);
   const [downloadingCalibration, setDownloadingCalibration] = useState(false);
   const [exportingHandwriting, setExportingHandwriting] = useState(false);
@@ -53,6 +59,12 @@ function App() {
       if (pdfUrl) URL.revokeObjectURL(pdfUrl);
     };
   }, [pdfUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (naturalPagePreview) URL.revokeObjectURL(naturalPagePreview);
+    };
+  }, [naturalPagePreview]);
 
   const selectedTopic = useMemo(
     () => topics.find((item) => item.term === term && item.week === week),
@@ -158,6 +170,25 @@ function App() {
       setError(reason instanceof Error ? reason.message : "We couldn't create the calibration sheet.");
     } finally {
       setDownloadingCalibration(false);
+    }
+  }
+
+  async function inspectNaturalPage() {
+    clearFeedback();
+    if (!naturalPage) {
+      setError("Choose a clear photo of an ordinary handwritten notebook page first.");
+      return;
+    }
+    setAnalyzingNaturalPage(true);
+    setNaturalAnalysis(null);
+    try {
+      const result = await analyzeNaturalPage(naturalPage);
+      setNaturalAnalysis(result);
+      setNotice("Your notebook page has been analyzed. Review the image-quality and line-detection results below.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "We couldn't analyze this notebook page.");
+    } finally {
+      setAnalyzingNaturalPage(false);
     }
   }
 
@@ -343,7 +374,58 @@ function App() {
 
           {section === "handwriting" && (
             <>
-              <div className="page-heading"><div className="eyebrow"><span className="eyebrow-line" /> HANDWRITING WORKFLOW</div><h1>Create a handwriting-style lesson PDF.</h1><p>This experimental handwriting workflow builds a partial personal font from a generated, labeled worksheet. Natural notebook-page recognition is not supported.</p></div>
+              <div className="page-heading"><div className="eyebrow"><span className="eyebrow-line" /> HANDWRITING WORKFLOW</div><h1>Analyze your handwriting sample.</h1><p>Upload an ordinary notebook page to check image quality, correct page geometry and detect natural writing lines. Text recognition and personal handwriting generation are separate later stages.</p></div>
+              <section className="panel natural-page-panel">
+                <div className="panel-heading">
+                  <div><span className="step-kicker">GROUP 2 · NATURAL PAGE INTAKE</span><h2>Upload a real notebook page</h2><p>Use a normal photo or scan. No printed calibration worksheet or character labels are required for this analysis.</p></div>
+                  <span className="panel-icon">01</span>
+                </div>
+                <label className="upload-box natural-upload">
+                  <span className="upload-symbol" aria-hidden="true">↑</span>
+                  <span className="upload-copy"><strong>{naturalPage?.name ?? "Choose a notebook-page photo"}</strong><small>JPG, PNG or WebP · up to 12 MB · 24 megapixels maximum</small></span>
+                  <span className="button button-secondary upload-button" aria-hidden="true">Browse files</span>
+                  <input type="file" accept="image/jpeg,image/png,image/webp" aria-label="Choose an ordinary handwritten notebook page"
+                    onChange={(event) => {
+                      clearFeedback();
+                      setNaturalAnalysis(null);
+                      const file = event.target.files?.[0] ?? null;
+                      if (file && file.size > 12 * 1024 * 1024) {
+                        setNaturalPage(null);
+                        setNaturalPagePreview("");
+                        setError("The image must be 12 MB or smaller.");
+                        return;
+                      }
+                      setNaturalPage(file);
+                      setNaturalPagePreview(file ? URL.createObjectURL(file) : "");
+                    }} />
+                </label>
+                <p className="sample-help">For best results, photograph the full page in even light, keep the camera parallel to the paper and make the writing sharp and readable.</p>
+                {naturalPagePreview && <div className="natural-preview-wrap"><img className="natural-preview" src={naturalPagePreview} alt="Selected handwritten notebook page preview" /><div className="natural-preview-caption">Original upload preview · retained in this browser session only</div></div>}
+                <div className="panel-actions">
+                  <span className="helper-text">The original upload is not saved as a teacher profile.</span>
+                  <button className="button button-primary" onClick={inspectNaturalPage} disabled={!naturalPage || analyzingNaturalPage}>
+                    {analyzingNaturalPage ? "Analyzing page…" : "Analyze notebook page"} <span aria-hidden="true">→</span>
+                  </button>
+                </div>
+                {naturalAnalysis && (
+                  <div className="natural-results" role="status" aria-live="polite">
+                    <div className="natural-result-heading"><div><span className="step-kicker">IMAGE ANALYSIS</span><h3>Page analysis results</h3></div><span className={naturalAnalysis.analysis.quality === "usable" ? "status-pill" : "status-pill warning"}>{naturalAnalysis.analysis.quality === "usable" ? "Usable image" : "Needs improvement"}</span></div>
+                    <div className="natural-metrics">
+                      <div><strong>{naturalAnalysis.analysis.width} × {naturalAnalysis.analysis.height}</strong><small>Processed dimensions</small></div>
+                      <div><strong>{naturalAnalysis.analysis.line_count}</strong><small>Writing lines detected</small></div>
+                      <div><strong>{naturalAnalysis.analysis.blur_score}</strong><small>Sharpness score</small></div>
+                      <div><strong>{naturalAnalysis.analysis.deskew_degrees}°</strong><small>Deskew correction</small></div>
+                    </div>
+                    <ul className="natural-checks">
+                      <li>{naturalAnalysis.analysis.perspective_corrected ? "Page perspective correction applied" : "No confident page boundary found; original framing retained"}</li>
+                      {naturalAnalysis.analysis.warnings.map((warning, index) => <li key={index}>{warning}</li>)}
+                      {naturalAnalysis.analysis.warnings.length === 0 && <li>No image-quality warnings were detected.</li>}
+                    </ul>
+                    <div className="recognition-boundary"><strong>Recognition status: not yet configured.</strong><p>This stage detects and prepares writing lines; it does not transcribe the teacher's handwriting or create a personal font. Those require a genuine handwriting-recognition model and a verified writer-profile pipeline.</p></div>
+                  </div>
+                )}
+              </section>
+
               <section className="panel">
                 <div className="panel-heading"><div><span className="step-kicker">STEP 01 · CHOOSE A LESSON</span><h2>Choose the note for your PDF</h2><p>The regular printable PDF remains available without a worksheet or handwriting sample.</p></div></div>
                 <div className="form-grid">
