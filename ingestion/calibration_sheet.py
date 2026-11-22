@@ -7,6 +7,7 @@ notebook page. Natural-page handwriting still requires a real HTR provider.
 from __future__ import annotations
 
 from io import BytesIO
+import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -119,23 +120,32 @@ def extract_calibration_glyphs(image_bytes: bytes) -> Tuple[List[Dict[str, Any]]
     if not image_bytes or len(image_bytes) > MAX_IMAGE_BYTES:
         raise CalibrationSheetError("Upload a JPG or PNG calibration-sheet scan smaller than 12 MB.")
     try:
-        with Image.open(BytesIO(image_bytes)) as decoded:
-            if decoded.format not in {"JPEG", "PNG"}:
-                raise CalibrationSheetError("Upload a JPG or PNG calibration-sheet scan.")
-            source_width, source_height = decoded.size
-            if (
-                source_width < 1
-                or source_height < 1
-                or source_width > MAX_IMAGE_SIDE
-                or source_height > MAX_IMAGE_SIDE
-                or source_width * source_height > MAX_IMAGE_PIXELS
-            ):
-                raise CalibrationSheetError(
-                    "The scan dimensions are too large. Export a JPG or PNG with no more than 12 megapixels."
-                )
-            rgb = np.asarray(decoded.convert("RGB"))
+        # Pillow checks its global pixel threshold while opening, before our
+        # stricter dimensions check can run. Promote the warning to an error so
+        # oversized/decompression-bomb images become a controlled client error.
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(BytesIO(image_bytes)) as decoded:
+                if decoded.format not in {"JPEG", "PNG"}:
+                    raise CalibrationSheetError("Upload a JPG or PNG calibration-sheet scan.")
+                source_width, source_height = decoded.size
+                if (
+                    source_width < 1
+                    or source_height < 1
+                    or source_width > MAX_IMAGE_SIDE
+                    or source_height > MAX_IMAGE_SIDE
+                    or source_width * source_height > MAX_IMAGE_PIXELS
+                ):
+                    raise CalibrationSheetError(
+                        "The scan dimensions are too large. Export a JPG or PNG with no more than 12 megapixels."
+                    )
+                rgb = np.asarray(decoded.convert("RGB"))
     except CalibrationSheetError:
         raise
+    except (Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
+        raise CalibrationSheetError(
+            "This image exceeds the safe size limit. Resize it to no more than 12 megapixels and upload it again."
+        ) from exc
     except (OSError, ValueError, UnidentifiedImageError) as exc:
         raise CalibrationSheetError("We could not read this image. Upload a clear JPG or PNG scan.") from exc
     image = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
