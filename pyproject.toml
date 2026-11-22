@@ -36,7 +36,7 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["curriculum*", "ingestion*", "model*", "renderer*", "scripts*", "samples*"]
+include = ["curriculum*", "ingestion*", "model*", "renderer*", "scripts*", "samples*", "qa*"]
 namespaces = true
 
 [tool.setuptools.package-data]
