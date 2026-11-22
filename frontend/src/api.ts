@@ -130,6 +130,8 @@ export type NaturalPageAnalysis = {
     perspective_corrected: boolean;
     deskew_degrees: number;
     page_corners: number[][] | null;
+    source_sha256: string | null;
+    processed_preview: string | null;
     lines: Array<{ index: number; bbox: number[]; ink_ratio: number }>;
   };
 };
