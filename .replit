@@ -1,0 +1,10 @@
+entrypoint = "main.py"
+build = "bash replit_start.sh --build-only"
+run = "bash replit_start.sh"
+
+[deployment]
+run = ["bash", "replit_start.sh"]
+deploymentTarget = "cloudrun"
+
+[unitTest]
+language = "python3"
