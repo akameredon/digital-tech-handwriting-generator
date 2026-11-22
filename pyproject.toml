@@ -33,6 +33,9 @@ htr = [
     "protobuf>=7.0.0,<8.0",
     "sentencepiece>=0.1.99,<1.0",
 ]
+kraken = [
+    "kraken>=6.0.0,<7.0",
+]
 
 [project.scripts]
 dt-notes = "scripts.generate_note:main"

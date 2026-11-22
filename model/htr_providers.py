@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
+from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
 
 import numpy as np
@@ -111,7 +112,7 @@ class TrOCRProvider:
             raise ValueError("Each HTR line must be grayscale or RGB image data.")
         if image.dtype != np.uint8:
             image = np.clip(image, 0, 255).astype(np.uint8)
-        return Image.fromarray(image, mode="RGB")
+        return Image.fromarray(image)
 
     def recognize_lines(self, lines: Sequence[np.ndarray]) -> Sequence[Dict[str, Any]]:
         """Return one transcription and confidence mapping per line crop.
@@ -182,4 +183,124 @@ def trocr_from_environment() -> TrOCRProvider:
         local_files_only=local_only,
         num_threads=int(threads) if threads else None,
         max_new_tokens=int(os.getenv("HTR_TROCR_MAX_NEW_TOKENS", "128")),
+    ))
+
+
+@dataclass(frozen=True)
+class KrakenConfig:
+    """Explicit local Kraken model configuration."""
+
+    model_path: str
+    device: str = "cpu"
+
+
+class KrakenProvider:
+    """Recognize line crops with Kraken character cuts.
+
+    Kraken's recognition records expose a prediction, per-character cuts, and
+    confidences. Those cuts are converted to the provider-neutral
+    ``character_boxes`` contract. A missing or malformed cut is preserved as
+    invalid geometry so the alignment stage requests review instead of
+    shifting later labels by position.
+    """
+
+    name = "kraken"
+
+    def __init__(self, config: KrakenConfig, *, model: Any = None, recognizer: Any = None):
+        self.config = config
+        self._model = model
+        self._recognizer = recognizer
+
+    @property
+    def model_id(self) -> str:
+        return self.config.model_path
+
+    @staticmethod
+    def _to_pil(line: np.ndarray) -> Image.Image:
+        return TrOCRProvider._to_pil(line)
+
+    def _load(self) -> None:
+        if self._model is not None and self._recognizer is not None:
+            return
+        try:
+            from kraken import rpred
+            from kraken.lib import models
+        except ImportError as exc:  # pragma: no cover - depends on optional runtime
+            raise HTRProviderConfigurationError(
+                "Kraken requires the optional 'kraken' package before it can be enabled."
+            ) from exc
+        if not Path(self.config.model_path).is_file():
+            raise HTRProviderConfigurationError(
+                f"Kraken model file was not found: {self.config.model_path}"
+            )
+        try:
+            self._model = models.load_any(self.config.model_path, device=self.config.device)
+        except Exception as exc:  # pragma: no cover - depends on local model
+            raise HTRProviderConfigurationError(
+                f"Could not load the local Kraken model {self.config.model_path!r}."
+            ) from exc
+        self._recognizer = rpred.rpred
+
+    @staticmethod
+    def _bbox(cut: Any) -> Optional[list[int]]:
+        if cut is None:
+            return None
+        points = cut
+        if isinstance(cut, dict):
+            points = cut.get("bbox", cut.get("polygon"))
+        if not isinstance(points, (list, tuple)) or len(points) < 2:
+            return None
+        try:
+            if len(points) == 4 and all(isinstance(value, (int, float)) for value in points):
+                x, y, width, height = (int(value) for value in points)
+                return [x, y, width, height]
+            xs = [int(point[0]) for point in points]
+            ys = [int(point[1]) for point in points]
+            return [min(xs), min(ys), max(xs) - min(xs) + 1, max(ys) - min(ys) + 1]
+        except (TypeError, ValueError, IndexError):
+            return None
+
+    def _recognize_one(self, line: np.ndarray) -> Dict[str, Any]:
+        image = self._to_pil(line)
+        width, height = image.size
+        segmentation = {"type": "box", "boxes": [(0, 0, width, height)]}
+        records = list(self._recognizer(self._model, image, segmentation))
+        if len(records) != 1:
+            raise RuntimeError("Kraken returned an unexpected number of line records.")
+        record = records[0]
+        text = str(getattr(record, "prediction", ""))
+        cuts = list(getattr(record, "cuts", []) or [])
+        confidences = list(getattr(record, "confidences", []) or [])
+        boxes: list[Dict[str, Any]] = []
+        visible_scores: list[float] = []
+        for index, character in enumerate(text):
+            if character.isspace():
+                continue
+            confidence = float(confidences[index]) if index < len(confidences) else 0.0
+            bbox = self._bbox(cuts[index]) if index < len(cuts) else None
+            boxes.append({"bbox": bbox, "confidence": confidence})
+            visible_scores.append(confidence)
+        return {
+            "text": text,
+            "confidence": sum(visible_scores) / len(visible_scores) if visible_scores else 0.0,
+            "character_boxes": boxes,
+            "character_geometry_mismatch": len(cuts) != len(text),
+            "provider": self.name,
+        }
+
+    def recognize_lines(self, lines: Sequence[np.ndarray]) -> Sequence[Dict[str, Any]]:
+        self._load()
+        return [self._recognize_one(line) for line in lines]
+
+
+def kraken_from_environment() -> KrakenProvider:
+    """Create a lazy Kraken provider from an explicitly provisioned model path."""
+    model_path = os.getenv("HTR_KRAKEN_MODEL", "")
+    if not model_path:
+        raise HTRProviderConfigurationError(
+            "HTR_KRAKEN_MODEL must point to a provisioned local Kraken model file."
+        )
+    return KrakenProvider(KrakenConfig(
+        model_path=model_path,
+        device=os.getenv("HTR_KRAKEN_DEVICE", "cpu"),
     ))

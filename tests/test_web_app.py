@@ -23,6 +23,7 @@ def test_existing_and_new_web_routes_are_available():
     assert "/handwriting/calibration-sheet" in paths
     assert "/export/handwriting-pdf" in paths
     assert "/analyze/handwriting" in paths
+    assert "/analyze/handwriting/confirm" in paths
 
 
 def test_invalid_topic_filter_is_a_client_error():

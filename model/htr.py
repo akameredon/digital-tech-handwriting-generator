@@ -163,6 +163,8 @@ class HTRPipeline:
             ambiguous = raw.get("ambiguous_characters", [])
             if ambiguous:
                 reasons.append("ambiguous characters: " + ", ".join(map(str, ambiguous)))
+            if raw.get("character_geometry_mismatch"):
+                reasons.append("character geometry count mismatch")
             expected_characters = len([character for character in text if not character.isspace()])
             if character_boxes and len(character_boxes) != expected_characters:
                 reasons.append("character geometry count mismatch")

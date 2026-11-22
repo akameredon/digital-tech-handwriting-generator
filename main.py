@@ -1,6 +1,7 @@
 """Digital Technologies lesson-note API and printable PDF service."""
 
 import asyncio
+import json
 import logging
 import os
 from pathlib import Path
@@ -29,9 +30,18 @@ from ingestion.calibration_sheet import (
 from ingestion.preprocessor import DEFAULT_SAMPLE_ROWS
 from ingestion.open_handwriting import HandwritingIntakeError, OpenHandwritingIntake, RecognitionUnavailable
 from model.font_compiler import FontCompilationError, FontCompiler
-from model.glyph_alignment_pipeline import align_document_glyphs
+from model.glyph_alignment_pipeline import (
+    align_document_glyphs,
+    confirm_document_glyphs,
+    learn_writer_profile,
+)
 from model.htr import HTRPipeline
-from model.htr_providers import HTRProviderConfigurationError, trocr_from_environment
+from model.htr_providers import (
+    HTRProviderConfigurationError,
+    kraken_from_environment,
+    trocr_from_environment,
+)
+from model.profile_management import ManagedWriterProfile, WriterProfileStore
 from renderer.pdf_exporter import ClassmatePDFExporter
 
 logger = logging.getLogger(__name__)
@@ -313,13 +323,16 @@ def _configured_natural_htr_provider():
     is used. The base application remains usable without the optional ML extra.
     """
     global _natural_htr_provider
-    if os.getenv("HTR_PROVIDER", "").lower() != "trocr":
+    provider_name = os.getenv("HTR_PROVIDER", "").lower()
+    if provider_name not in {"trocr", "kraken"}:
         raise RecognitionUnavailable(
             "Natural-page handwriting recognition is not enabled on this server. "
-            "Set HTR_PROVIDER=trocr after provisioning the optional local model."
+            "Set HTR_PROVIDER=trocr or HTR_PROVIDER=kraken after provisioning an optional local model."
         )
     if _natural_htr_provider is None:
-        _natural_htr_provider = trocr_from_environment()
+        _natural_htr_provider = (
+            kraken_from_environment() if provider_name == "kraken" else trocr_from_environment()
+        )
     return _natural_htr_provider
 
 
@@ -372,6 +385,55 @@ async def analyze_handwriting_page(page: UploadFile = File(...)):
             status_code=500,
             detail=f"The handwriting page could not be analyzed. Reference: {request_id}",
         ) from exc
+
+
+@app.post("/analyze/handwriting/confirm")
+async def confirm_handwriting_page(
+    page: UploadFile = File(...),
+    confirmations: str = Form(...),
+    writer_name: str = Form(...),
+):
+    """Persist only explicit browser confirmations as writer-profile evidence."""
+    try:
+        parsed = json.loads(confirmations)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=422, detail="confirmations must be a JSON object.") from exc
+    if not isinstance(parsed, dict) or not parsed or not writer_name.strip():
+        raise HTTPException(status_code=422, detail="Provide a writer name and at least one confirmation.")
+    if not all(isinstance(key, str) and isinstance(value, str) for key, value in parsed.items()):
+        raise HTTPException(status_code=422, detail="Confirmation keys and labels must be strings.")
+
+    image_bytes = await page.read(MAX_IMAGE_BYTES + 1)
+    if len(image_bytes) > MAX_IMAGE_BYTES or not image_bytes:
+        raise HTTPException(status_code=422, detail="Upload a non-empty handwriting page smaller than 12 MB.")
+    temp_dir = Path(tempfile.mkdtemp(prefix="dt-confirm-handwriting-"))
+    try:
+        image_path = temp_dir / "page.jpg"
+        image_path.write_bytes(image_bytes)
+        page_analysis = OpenHandwritingIntake().analyze(image_path)
+        recognition = HTRPipeline(_configured_natural_htr_provider()).recognize(page_analysis)
+        alignment = align_document_glyphs(page_analysis, recognition)
+        confirmed = confirm_document_glyphs(
+            alignment,
+            parsed,
+            source_width=page_analysis.width,
+            source_height=page_analysis.height,
+        )
+    except (HandwritingIntakeError, RecognitionUnavailable, HTRProviderConfigurationError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+    learned = learn_writer_profile(confirmed, writer_name=writer_name.strip())
+    store = WriterProfileStore(os.getenv("WRITER_PROFILE_DIR", "data/writer_profiles"))
+    managed = ManagedWriterProfile(learned.profile)
+    destination = store.save(managed)
+    return {
+        "profile": managed.public_dict(),
+        "path": str(destination),
+        "confirmed_count": len(confirmed.observations),
+        "learning": learned.public_dict(),
+    }
 
 
 def _create_handwriting_pdf(payload, image_bytes: bytes, temp_dir: Path, request_id: str):

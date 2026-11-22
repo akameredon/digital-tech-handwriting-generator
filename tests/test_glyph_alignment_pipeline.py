@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 from ingestion.open_handwriting import PageAnalysis, TextLineRegion
-from model.glyph_alignment_pipeline import align_document_glyphs
+from model.glyph_alignment_pipeline import align_document_glyphs, confirm_document_glyphs, learn_writer_profile
 from model.htr import HTRDocumentResult, HTRLineResult
 
 
@@ -51,3 +51,22 @@ def test_document_bridge_returns_candidates_with_explicit_geometry():
     assert [candidate.label for candidate in result.candidates] == ["a", "b"]
     assert result.needs_review is False
     assert result.candidates[0].source_bbox == (12, 26, 22, 22)
+
+
+def test_confirmed_candidates_are_the_only_profile_observations():
+    pending = align_document_glyphs(analysis(), htr([
+        {"bbox": [2, 6, 22, 22], "confidence": 0.99},
+        {"bbox": [28, 4, 23, 25], "confidence": 0.97},
+    ]))
+
+    confirmed = confirm_document_glyphs(
+        pending,
+        {"0:0": "a"},
+        source_width=90,
+        source_height=32,
+    )
+    assert [observation.label for observation in confirmed.observations] == ["a"]
+
+    learned = learn_writer_profile(confirmed, writer_name="Teacher")
+    assert learned.profile.name == "Teacher"
+    assert learned.coverage == {"a": 1}
