@@ -84,6 +84,7 @@ The CI workflow also builds the Docker image and smoke-tests the API. Green unit
 - [Complete lesson-content generation](docs/COMPLETE_LESSON_CONTENT_GENERATION.md)
 - [Notebook layout and PDF rendering](docs/NOTEBOOK_LAYOUT_AND_PDF_RENDERING.md)
 - [Quality assurance and acceptance gates](docs/QUALITY_ASSURANCE_ACCEPTANCE.md)
+- [Teacher correction and profile management](docs/TEACHER_CORRECTION_PROFILE_MANAGEMENT.md)
 - [Optional worksheet instructions](docs/SAMPLE_SHEET_INSTRUCTIONS.md)
 - [HTR research notes and sources](docs/HTR_RESEARCH_NOTES.md)
 - [Launch readiness checklist](docs/LAUNCH.md)
