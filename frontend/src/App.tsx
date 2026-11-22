@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
+  downloadCalibrationSheet,
   exportLessonPdf,
+  exportHandwritingPdf,
   getLesson,
   getPrompt,
   getTopics,
@@ -23,6 +25,10 @@ function App() {
   const [prompt, setPrompt] = useState("");
   const [pdfUrl, setPdfUrl] = useState("");
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [handwritingScan, setHandwritingScan] = useState<File | null>(null);
+  const [labelsConfirmed, setLabelsConfirmed] = useState(false);
+  const [downloadingCalibration, setDownloadingCalibration] = useState(false);
+  const [exportingHandwriting, setExportingHandwriting] = useState(false);
   const [loadingTopics, setLoadingTopics] = useState(true);
   const [loadingLesson, setLoadingLesson] = useState(false);
   const [loadingPrompt, setLoadingPrompt] = useState(false);
@@ -30,6 +36,7 @@ function App() {
   const [notice, setNotice] = useState("");
   const [copied, setCopied] = useState(false);
   const lessonRequestId = useRef(0);
+  const handwritingRequestId = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -65,11 +72,13 @@ function App() {
 
   function invalidateLesson() {
     lessonRequestId.current += 1;
+    handwritingRequestId.current += 1;
     setLesson(null);
     setPrompt("");
     setPdfUrl("");
     setLoadingLesson(false);
     setExportingPdf(false);
+    setExportingHandwriting(false);
   }
 
   async function reviewLesson() {
@@ -135,6 +144,44 @@ function App() {
       setError(reason instanceof Error ? reason.message : "We couldn't prepare the PDF.");
     } finally {
       if (requestId === lessonRequestId.current) setExportingPdf(false);
+    }
+  }
+
+  async function getCalibrationSheet() {
+    clearFeedback();
+    setDownloadingCalibration(true);
+    try {
+      const blob = await downloadCalibrationSheet();
+      saveBlob(blob, "digital-technologies-handwriting-calibration.pdf");
+      setNotice("The optional worksheet is downloading. Print it, write one character in each box, then scan the whole page upright.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "We couldn't create the calibration sheet.");
+    } finally {
+      setDownloadingCalibration(false);
+    }
+  }
+
+  async function downloadHandwritingStylePdf() {
+    clearFeedback();
+    if (!handwritingScan || !labelsConfirmed) {
+      setError("Choose a worksheet scan and confirm that each handwritten character matches its printed label.");
+      return;
+    }
+    setExportingHandwriting(true);
+    const requestId = ++handwritingRequestId.current;
+    try {
+      const result = await exportHandwritingPdf(classLevel, term, week, handwritingScan, labelsConfirmed);
+      if (requestId !== handwritingRequestId.current) return;
+      saveBlob(result.blob, `${classLevel}_${term.replaceAll(" ", "_")}_Week${week}_handwriting_style.pdf`);
+      setNotice(
+        `Your handwriting-style PDF is ready. The worksheet provided ${result.coveredCharacters} of ${result.totalCharacters} characters; ${result.missingCharacters} missing characters use standard text. Ordinary notebook-page handwriting recognition is not included.`
+      );
+    } catch (reason) {
+      if (requestId === handwritingRequestId.current) {
+        setError(reason instanceof Error ? reason.message : "We couldn't create the handwriting-style PDF.");
+      }
+    } finally {
+      if (requestId === handwritingRequestId.current) setExportingHandwriting(false);
     }
   }
 
@@ -296,11 +343,67 @@ function App() {
 
           {section === "handwriting" && (
             <>
-              <div className="page-heading"><div className="eyebrow"><span className="eyebrow-line" /> HANDWRITING WORKFLOW</div><h1>Handwriting export is not ready.</h1><p>This feature is paused so the app does not mislabel handwriting or create a misleading font.</p></div>
+              <div className="page-heading"><div className="eyebrow"><span className="eyebrow-line" /> HANDWRITING WORKFLOW</div><h1>Try an optional handwriting-style PDF.</h1><p>This controlled worksheet path uses only the labeled character boxes you fill in. Natural notebook-page recognition is still in development.</p></div>
               <section className="panel">
-                <div className="panel-heading"><div><span className="step-kicker">FEATURE STATUS</span><h2>No handwriting sample is needed for printable PDFs.</h2><p>The current server has no configured handwriting recognizer or reliable text-to-glyph alignment. Uploading a page could otherwise produce the wrong letters.</p></div></div>
-                <div className="callout"><strong>What works now</strong><p>Choose a lesson and download a ruled printable PDF in standard text. Handwriting-font export will remain disabled until recognition and real-sample validation are available.</p></div>
-                <button className="button button-primary" onClick={() => changeSection("create")}>Start a lesson <span aria-hidden="true">→</span></button>
+                <div className="panel-heading"><div><span className="step-kicker">STEP 01 · CHOOSE A LESSON</span><h2>Choose the note for your PDF</h2><p>The regular printable PDF remains available without a worksheet or handwriting sample.</p></div></div>
+                <div className="form-grid">
+                  <Field label="Class"><select value={classLevel} onChange={(event) => { invalidateLesson(); setClassLevel(event.target.value); }}>{CLASSES.map((value) => <option key={value}>{value}</option>)}</select></Field>
+                  <Field label="Term"><select value={term} onChange={(event) => { invalidateLesson(); setTerm(event.target.value); }}>{TERMS.map((value) => <option key={value}>{value}</option>)}</select></Field>
+                  <Field label="Week"><select value={week} onChange={(event) => { invalidateLesson(); setWeek(Number(event.target.value)); }}>{Array.from({ length: 13 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>Week {value}</option>)}</select></Field>
+                </div>
+                <div className="topic-preview">
+                  <div className="topic-symbol" aria-hidden="true">↗</div>
+                  <div className="topic-copy"><span>LESSON CONTENT</span><strong>{loadingTopics ? "Loading curriculum…" : selectedTopic?.topic ?? "Topic not available"}</strong><p>{selectedTopic?.content ?? "Choose another week or check your connection."}</p></div>
+                </div>
+                <div className="callout"><strong>Important limitation</strong><p>This optional worksheet labels characters by their printed boxes. Do not upload an ordinary notebook page here; it will be rejected rather than positionally mislabeled. Missing characters in the PDF use standard text.</p></div>
+              </section>
+              <section className="panel">
+                <div className="panel-heading"><div><span className="step-kicker">STEP 02 · OPTIONAL WORKSHEET</span><h2>Print, write and scan</h2><p>Fill the printed boxes with dark ink. Scan the full A4 landscape page upright as a JPG or PNG.</p></div><span className="panel-icon">02</span></div>
+                <div className="panel-actions">
+                  <span className="helper-text">Optional calibration sheet · A4 landscape · JPG/PNG scan</span>
+                  <button className="button button-secondary" onClick={getCalibrationSheet} disabled={downloadingCalibration}>
+                    {downloadingCalibration ? "Preparing worksheet…" : "Download optional worksheet"} <span aria-hidden="true">↓</span>
+                  </button>
+                </div>
+              </section>
+              <section className="panel">
+                <div className="panel-heading"><div><span className="step-kicker">STEP 03 · CREATE PDF</span><h2>Upload the completed worksheet</h2><p>Only characters found inside their labeled cells are compiled into the partial font.</p></div><span className="panel-icon">03</span></div>
+                <label className="upload-box">
+                  <span className="upload-symbol" aria-hidden="true">↑</span>
+                  <span className="upload-copy"><strong>{handwritingScan?.name ?? "Choose a worksheet scan"}</strong><small>JPG or PNG, full page, upright, under 12 MB</small></span>
+                  <span className="button button-secondary upload-button" aria-hidden="true">Browse files</span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png"
+                    aria-label="Choose a full-page calibration worksheet scan"
+                    aria-describedby="calibration-scan-help"
+                    onChange={(event) => {
+                      clearFeedback();
+                      handwritingRequestId.current += 1;
+                      setExportingHandwriting(false);
+                      const file = event.target.files?.[0] ?? null;
+                      if (file && file.size > 12 * 1024 * 1024) {
+                        setHandwritingScan(null);
+                        setLabelsConfirmed(false);
+                        setError("The scan must be smaller than 12 MB. Choose a smaller JPG or PNG file.");
+                      } else {
+                        setHandwritingScan(file);
+                        setLabelsConfirmed(false);
+                      }
+                    }}
+                  />
+                </label>
+                <p className="sample-help" id="calibration-scan-help">The scan is processed for this request only and is not kept as a teacher profile.</p>
+                <label className="confirmation-check">
+                  <input type="checkbox" checked={labelsConfirmed} onChange={(event) => { handwritingRequestId.current += 1; setExportingHandwriting(false); setLabelsConfirmed(event.target.checked); }} />
+                  <span>I checked the scan: every written character matches the printed label in its box.</span>
+                </label>
+                <div className="panel-actions">
+                  <span className="helper-text">The result reports character coverage and uses standard text for missing glyphs.</span>
+                  <button className="button button-primary" onClick={downloadHandwritingStylePdf} disabled={!handwritingScan || !labelsConfirmed || exportingHandwriting}>
+                    {exportingHandwriting ? "Creating your PDF…" : "Create handwriting-style PDF"} <span aria-hidden="true">→</span>
+                  </button>
+                </div>
               </section>
             </>
           )}
@@ -311,7 +414,7 @@ function App() {
               <section className="panel help-list">
                 <HelpItem title="How do I find my topic?" body="Choose your class, term and week. The curriculum topic and its content summary appear automatically." />
                 <HelpItem title="Why does my lesson say “Curriculum outline”?" body="A full prepared lesson note is not available for every week yet. You can copy a curriculum-aligned prompt and use it in your preferred AI tool." />
-                <HelpItem title="Can I create a handwriting-style PDF?" body="Not yet. The server does not have reliable handwriting recognition and text-to-glyph alignment configured, so that feature is disabled rather than returning falsely labeled handwriting. You can download a standard printable PDF." />
+                <HelpItem title="Can I create a handwriting-style PDF?" body="There is an optional controlled worksheet path. It labels only the generated worksheet's character boxes and uses standard text for missing characters. It does not recognize ordinary notebook pages. A standard printable PDF is available without the worksheet." />
                 <HelpItem title="Where does my printable PDF go?" body="Your browser downloads the generated PDF to its normal downloads location. The server writes the file to a temporary directory and removes it after sending the response." />
               </section>
             </>
@@ -361,6 +464,17 @@ function HelpItem({ title, body }: { title: string; body: string }) {
 
 function isSpecialWeek(topic: string) {
   return /exam|test|break|revision|closing|holiday/i.test(topic);
+}
+
+function saveBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export default App;

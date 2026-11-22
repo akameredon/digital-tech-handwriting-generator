@@ -4,7 +4,7 @@
 
 A Python/FastAPI lesson-note tool and teacher-facing web interface for Nigerian senior secondary Digital Technologies. It provides curriculum browsing, prepared lesson notes where available, curriculum outlines and prompts for other weeks, and ruled printable PDFs.
 
-> **Readiness note:** this repository is not being presented as production-ready. Handwriting-to-font export is intentionally disabled until real handwritten-text recognition and verified text-to-glyph alignment are implemented. A regular printable PDF is available instead.
+> **Readiness note:** this repository is not being presented as production-ready. An experimental handwriting-style PDF path accepts only the generated optional calibration worksheet and requires the teacher to confirm its printed labels. Natural notebook-page recognition and verified model-based text-to-glyph alignment are not implemented. A regular printable PDF remains available without a worksheet.
 
 ## Quick start
 
@@ -53,7 +53,7 @@ npm run dev
 
 Open the Vite address shown in the terminal, normally `http://localhost:5173`. Its development server proxies API requests to port 8000. With Docker, open `http://localhost:8000`.
 
-The interface supports curriculum browsing, lesson review, copying a curriculum-based prompt for use in a separate AI tool, and downloading a regular ruled PDF. The prompt endpoint does not call an AI model. The handwriting endpoint remains for compatibility but currently returns `503`; enabling it requires code integration of a genuine recognizer and verified text-to-glyph alignment, not just configuration. It will not generate a falsely labeled handwriting font.
+The interface supports curriculum browsing, lesson review, copying a curriculum-based prompt for use in a separate AI tool, and downloading regular ruled PDFs. The prompt endpoint does not call an AI model. The optional worksheet path uses known cell positions only on the generated sheet, requires teacher label confirmation, compiles a partial font, and reports missing-character fallback to standard text. It does not recognize arbitrary notebook pages, and the teacher confirmation is not machine verification. See [worksheet instructions](docs/SAMPLE_SHEET_INSTRUCTIONS.md) and the [recognition architecture decision](docs/OPEN_HANDWRITING_RECOGNITION.md).
 
 ## Lesson-note coverage
 
@@ -74,7 +74,8 @@ The CI workflow also builds the Docker image and smoke-tests the API. Green unit
 
 - [Teacher guide](docs/TEACHER_GUIDE.md)
 - [Handwriting feature status and architecture](docs/OPEN_HANDWRITING_RECOGNITION.md)
-- [Sample-sheet research notes](docs/SAMPLE_SHEET_INSTRUCTIONS.md)
+- [Optional worksheet instructions](docs/SAMPLE_SHEET_INSTRUCTIONS.md)
+- [HTR research notes and sources](docs/HTR_RESEARCH_NOTES.md)
 - [Launch readiness checklist](docs/LAUNCH.md)
 - [Changelog](CHANGELOG.md)
 

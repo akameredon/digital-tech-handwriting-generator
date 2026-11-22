@@ -22,8 +22,6 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from fontTools.ttLib import TTFont as FontToolsTTFont
 
-REQUIRED_TEXT_CHARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
-
 PINK = HexColor("#E91E63")
 BLUE_LINE = HexColor("#90CAF9")
 BOX_STROKE = HexColor("#5C6BC0")
@@ -57,13 +55,7 @@ class ClassmatePDFExporter:
         if font_path and Path(font_path).is_file():
             with FontToolsTTFont(str(font_path), checkChecksums=2) as parsed:
                 cmap = parsed.getBestCmap() or {}
-                self.custom_supported = {chr(codepoint) for codepoint in cmap}
-            missing_core = REQUIRED_TEXT_CHARS - self.custom_supported
-            if missing_core:
-                raise ValueError(
-                    "Handwriting font is missing required letters or digits: "
-                    + "".join(sorted(missing_core))
-                )
+            self.custom_supported = {chr(codepoint) for codepoint in cmap}
             pdfmetrics.registerFont(TTFont(font_name, str(font_path)))
             self.font_name = font_name
 
@@ -71,6 +63,27 @@ class ClassmatePDFExporter:
         if self.font_name != "Helvetica" and char in self.custom_supported:
             return self.font_name
         return self.fallback_font
+
+    def release_temporary_font(self) -> None:
+        """Release a uniquely named request font after its PDF has been written."""
+        if self.font_name == "Helvetica":
+            return
+        from reportlab.lib import fonts as family_fonts
+
+        name = self.font_name
+        font = pdfmetrics._fonts.pop(name, None)
+        face = getattr(font, "face", None)
+        face_name = getattr(face, "name", None)
+        if face_name:
+            pdfmetrics._dynFaceNames.pop(face_name, None)
+        for bold in (0, 1):
+            for italic in (0, 1):
+                key = (name.lower(), bold, italic)
+                ps_name = family_fonts._tt2ps_map.pop(key, None)
+                if ps_name:
+                    family_fonts._ps2tt_map.pop(ps_name.lower(), None)
+        self.font_name = "Helvetica"
+        self.custom_supported = set()
 
     def _width(self, text: str, size: float) -> float:
         return sum(

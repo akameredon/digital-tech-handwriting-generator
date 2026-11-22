@@ -1,14 +1,17 @@
 """Digital Technologies lesson-note API and printable PDF service."""
 
+import asyncio
 import logging
 from pathlib import Path
 import shutil
 import tempfile
 from typing import Optional
+from uuid import uuid4
 
 import uvicorn
-from fastapi import FastAPI, Form, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from starlette.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 
@@ -16,15 +19,80 @@ from curriculum.nerdc_schemes import get_lesson, list_all_topics
 from curriculum.prompt_engine import build_prompt
 from curriculum.sample_notes import get_prepared_lesson
 from curriculum.validator import is_exam_or_break_week
+from ingestion.calibration_sheet import (
+    MAX_IMAGE_BYTES,
+    CalibrationSheetError,
+    extract_calibration_glyphs,
+    write_calibration_sheet,
+)
+from ingestion.preprocessor import DEFAULT_SAMPLE_ROWS
+from model.font_compiler import FontCompilationError, FontCompiler
 from renderer.pdf_exporter import ClassmatePDFExporter
 
 logger = logging.getLogger(__name__)
+MAX_HANDWRITING_REQUEST_BYTES = MAX_IMAGE_BYTES + 256 * 1024
+
+
+class RequestBodyTooLarge(Exception):
+    """Raised when a request exceeds the upload endpoint's body limit."""
+
+
+class HandwritingUploadLimitMiddleware:
+    """Limit the full multipart body before Starlette spools an oversized upload."""
+
+    def __init__(self, app):
+        self.app = app
+        self.active_uploads = asyncio.Semaphore(2)
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http" or scope.get("path") != "/export/handwriting-pdf":
+            await self.app(scope, receive, send)
+            return
+
+        headers = dict(scope.get("headers", []))
+        content_length = headers.get(b"content-length")
+        if content_length is not None:
+            try:
+                declared_length = int(content_length)
+            except ValueError:
+                response = JSONResponse({"detail": "Invalid upload content length."}, status_code=400)
+                await response(scope, receive, send)
+                return
+            if declared_length > MAX_HANDWRITING_REQUEST_BYTES:
+                response = JSONResponse(
+                    {"detail": "The upload request is too large. Keep the worksheet image under 12 MB."},
+                    status_code=413,
+                )
+                await response(scope, receive, send)
+                return
+
+        received_bytes = 0
+
+        async def limited_receive():
+            nonlocal received_bytes
+            message = await receive()
+            if message.get("type") == "http.request":
+                received_bytes += len(message.get("body", b""))
+                if received_bytes > MAX_HANDWRITING_REQUEST_BYTES:
+                    raise RequestBodyTooLarge
+            return message
+
+        try:
+            async with self.active_uploads:
+                await self.app(scope, limited_receive, send)
+        except RequestBodyTooLarge:
+            response = JSONResponse(
+                {"detail": "The upload request is too large. Keep the worksheet image under 12 MB."},
+                status_code=413,
+            )
+            await response(scope, receive, send)
 
 app = FastAPI(
     title="Digital Technologies Lesson Note Generator",
     description="NERDC 2025 aligned lesson notes for SS1-SS3 Digital Technologies",
     version="1.1.2"
 )
+app.add_middleware(HandwritingUploadLimitMiddleware)
 
 ROOT_DIR = Path(__file__).parent
 SAMPLES_DIR = ROOT_DIR / "samples"
@@ -214,17 +282,101 @@ def export_lesson_pdf(
         raise HTTPException(status_code=500, detail="The printable PDF could not be created. Please try again.")
 
 
-@app.post("/export/handwriting-pdf")
-async def export_handwriting_pdf():
-    """Keep the legacy endpoint but refuse to fabricate handwriting without HTR."""
-    raise HTTPException(
-        status_code=503,
-        detail=(
-            "Handwriting-to-font export is disabled because this service has no integrated "
-            "handwriting recognizer or verified text-to-glyph alignment. No handwriting PDF was generated. "
-            "Use the printable lesson PDF instead."
-        ),
+@app.get("/handwriting/calibration-sheet")
+def download_calibration_sheet():
+    """Download the optional fixed-layout worksheet used only for known-cell labels."""
+    temp_dir = Path(tempfile.mkdtemp(prefix="dt-calibration-sheet-"))
+    try:
+        sheet_path = write_calibration_sheet(temp_dir / "handwriting_calibration.pdf")
+        return FileResponse(
+            path=str(sheet_path),
+            media_type="application/pdf",
+            filename="digital-technologies-handwriting-calibration.pdf",
+            background=BackgroundTask(shutil.rmtree, temp_dir, ignore_errors=True),
+        )
+    except Exception:
+        logger.exception("Handwriting calibration sheet could not be created")
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        raise HTTPException(status_code=500, detail="The optional calibration sheet could not be created.")
+
+
+def _create_handwriting_pdf(payload, image_bytes: bytes, temp_dir: Path, request_id: str):
+    glyphs, _missing_from_scan = extract_calibration_glyphs(image_bytes)
+    font_path = FontCompiler().compile(
+        glyphs,
+        temp_dir / "teacher_handwriting.ttf",
+        family_name=f"TeacherHandwriting{request_id}",
+        style_name="Regular",
     )
+    font_name = f"TeacherHandwriting_{request_id}"
+    exporter = ClassmatePDFExporter(font_path=str(font_path), font_name=font_name)
+    try:
+        pdf_path = exporter.export_lesson(
+            payload["lesson_note"],
+            temp_dir / "handwriting_lesson.pdf",
+            title=f"{payload['class_level']} {payload['term']} Week {payload['week']} — handwriting-style",
+        )
+        expected_chars = set("".join(DEFAULT_SAMPLE_ROWS))
+        covered = len(exporter.custom_supported & expected_chars)
+        missing_count = len(expected_chars - exporter.custom_supported)
+        return pdf_path, covered, len(expected_chars), missing_count
+    finally:
+        exporter.release_temporary_font()
+
+
+@app.post("/export/handwriting-pdf")
+async def export_handwriting_pdf(
+    class_level: str = Form(...),
+    term: str = Form(...),
+    week: int = Form(...),
+    calibration_scan: UploadFile = File(...),
+    confirm_labels: bool = Form(False),
+):
+    """Create a partial handwritten-style PDF from the optional labeled worksheet only."""
+    payload = build_lesson_payload(class_level, term, week)
+    if not confirm_labels:
+        raise HTTPException(
+            status_code=422,
+            detail="Confirm that each handwritten character matches its printed worksheet label before exporting.",
+        )
+
+    request_id = uuid4().hex[:12]
+    temp_dir = None
+    try:
+        image_bytes = await calibration_scan.read(MAX_IMAGE_BYTES + 1)
+        if len(image_bytes) > MAX_IMAGE_BYTES:
+            raise HTTPException(status_code=422, detail="The scan must be smaller than 12 MB.")
+        temp_dir = Path(tempfile.mkdtemp(prefix="dt-handwriting-pdf-"))
+        pdf_path, covered, total, missing_count = await run_in_threadpool(
+            _create_handwriting_pdf, payload, image_bytes, temp_dir, request_id
+        )
+        return FileResponse(
+            path=str(pdf_path),
+            media_type="application/pdf",
+            filename=f"{class_level}_{term.replace(' ', '_')}_Week{week}_handwriting_style.pdf",
+            headers={
+                "X-Handwriting-Coverage": f"{covered}/{total}",
+                "X-Handwriting-Missing-Count": str(missing_count),
+                "X-Handwriting-Fallback": "Helvetica",
+            },
+            background=BackgroundTask(shutil.rmtree, temp_dir, ignore_errors=True),
+        )
+    except HTTPException:
+        if temp_dir:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        raise
+    except (CalibrationSheetError, FontCompilationError) as exc:
+        if temp_dir:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        if temp_dir:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        logger.exception("Handwriting-style PDF export failed request_id=%s", request_id)
+        raise HTTPException(
+            status_code=500,
+            detail=f"The PDF could not be created. Reference: {request_id}",
+        ) from exc
 
 
 if __name__ == "__main__":

@@ -1,10 +1,10 @@
-# Release readiness — v1.1.2
+# Release readiness — next release after v1.1.2
 
 ## Current status: not production-ready
 
-The current build provides curriculum browsing, prepared notes where the metadata agrees with the encoded curriculum, curriculum outlines, prompts for external AI tools, and standard ruled printable PDFs. Handwriting-to-font export is intentionally unavailable: no handwriting-recognition model or verified text-to-glyph alignment provider is configured. The compatibility endpoint returns `503` instead of creating a misleading font.
+The current project provides curriculum browsing, prepared notes where metadata agrees with the encoded curriculum, curriculum outlines, prompts for external AI tools, and standard ruled printable PDFs. It also has an experimental optional worksheet-only handwriting-style PDF path. That path uses known cells on a generated worksheet, requires a teacher label confirmation, compiles a partial font, and reports fallback for missing characters.
 
-Do not describe or deploy this version as a production handwriting service. The UI must continue to describe the limitation until the recognition and alignment gates below are complete.
+Natural notebook-page handwriting recognition and verified model-based text-to-glyph alignment are not implemented. The teacher checkbox is a self-check, not machine verification. Do not describe or deploy this project as a production handwriting-recognition service. The optional worksheet does not satisfy the natural-page release gates below.
 
 ## Local verification
 
@@ -23,4 +23,4 @@ The CI workflow additionally builds the Docker image and checks `/health`, `/`, 
 4. Complete the mobile, keyboard, screen-reader, contrast, and reduced-motion checks in `docs/FRONTEND_IMPLEMENTATION_GATES.md`.
 5. Run a deployment preview with safe test data, verify rollback, record logs and memory/latency behavior, and obtain explicit release approval before production deployment.
 
-Until then, teachers can use the standard printable PDF and the lesson/prompt workflows.
+Until those gates are met, teachers can use the standard printable PDF and the lesson/prompt workflows. The calibration worksheet is an optional experiment, not a replacement for ordinary handwriting recognition.
