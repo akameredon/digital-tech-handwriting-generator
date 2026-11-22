@@ -26,12 +26,13 @@ from ingestion.calibration_sheet import (
     write_calibration_sheet,
 )
 from ingestion.preprocessor import DEFAULT_SAMPLE_ROWS
-from ingestion.open_handwriting import OpenHandwritingIntake, HandwritingIntakeError
+from ingestion.open_handwriting import OpenHandwritingIntake, HandwritingIntakeError, MAX_NATURAL_PAGE_BYTES
 from model.font_compiler import FontCompilationError, FontCompiler
 from renderer.pdf_exporter import ClassmatePDFExporter
 
 logger = logging.getLogger(__name__)
 MAX_HANDWRITING_REQUEST_BYTES = MAX_IMAGE_BYTES + 256 * 1024
+MAX_NATURAL_PAGE_REQUEST_BYTES = MAX_NATURAL_PAGE_BYTES + 256 * 1024
 
 
 class RequestBodyTooLarge(Exception):
@@ -46,9 +47,12 @@ class HandwritingUploadLimitMiddleware:
         self.active_uploads = asyncio.Semaphore(2)
 
     async def __call__(self, scope, receive, send):
-        if scope.get("type") != "http" or scope.get("path") != "/export/handwriting-pdf":
+        if scope.get("type") != "http" or scope.get("path") not in {
+            "/export/handwriting-pdf", "/handwriting/analyze"
+        }:
             await self.app(scope, receive, send)
             return
+        request_limit = MAX_HANDWRITING_REQUEST_BYTES if scope.get("path") == "/export/handwriting-pdf" else MAX_NATURAL_PAGE_REQUEST_BYTES
 
         headers = dict(scope.get("headers", []))
         content_length = headers.get(b"content-length")
@@ -59,11 +63,9 @@ class HandwritingUploadLimitMiddleware:
                 response = JSONResponse({"detail": "Invalid upload content length."}, status_code=400)
                 await response(scope, receive, send)
                 return
-            if declared_length > MAX_HANDWRITING_REQUEST_BYTES:
-                response = JSONResponse(
-                    {"detail": "The upload request is too large. Keep the worksheet image under 12 MB."},
-                    status_code=413,
-                )
+            if declared_length > request_limit:
+                message = "The upload request is too large. Keep the worksheet image under 12 MB." if scope.get("path") == "/export/handwriting-pdf" else "The image upload request is too large. Keep the page image under 12 MB."
+                response = JSONResponse({"detail": message}, status_code=413)
                 await response(scope, receive, send)
                 return
 
@@ -74,7 +76,7 @@ class HandwritingUploadLimitMiddleware:
             message = await receive()
             if message.get("type") == "http.request":
                 received_bytes += len(message.get("body", b""))
-                if received_bytes > MAX_HANDWRITING_REQUEST_BYTES:
+                if received_bytes > request_limit:
                     raise RequestBodyTooLarge
             return message
 
@@ -82,10 +84,8 @@ class HandwritingUploadLimitMiddleware:
             async with self.active_uploads:
                 await self.app(scope, limited_receive, send)
         except RequestBodyTooLarge:
-            response = JSONResponse(
-                {"detail": "The upload request is too large. Keep the worksheet image under 12 MB."},
-                status_code=413,
-            )
+            message = "The upload request is too large. Keep the worksheet image under 12 MB." if scope.get("path") == "/export/handwriting-pdf" else "The image upload request is too large. Keep the page image under 12 MB."
+            response = JSONResponse({"detail": message}, status_code=413)
             await response(scope, receive, send)
 
 app = FastAPI(
