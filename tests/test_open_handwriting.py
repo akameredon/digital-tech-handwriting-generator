@@ -103,3 +103,53 @@ def test_upload_api_rejects_unsupported_mime_type():
         assert exc.status_code == 415
     else:
         raise AssertionError("Unsupported MIME type must be rejected")
+
+
+def test_detects_and_rectifies_perspective_page():
+    image = np.full((1000, 800, 3), 35, dtype=np.uint8)
+    corners = np.array([[150, 100], [650, 125], [625, 900], [120, 865]], dtype=np.int32)
+    cv2.fillConvexPoly(image, corners, (245, 245, 245))
+    for y in (240, 360, 500, 650, 780):
+        cv2.putText(image, "Natural notebook writing", (175, y),
+                    cv2.FONT_HERSHEY_SCRIPT_SIMPLEX, 0.8, (25, 35, 70), 2)
+    intake = OpenHandwritingIntake()
+    corrected, detected, points = intake._rectify_page(image)
+    assert detected is True
+    assert points is not None and len(points) == 4
+    assert corrected.shape[0] > corrected.shape[1] * 1.2
+
+
+def test_deskew_corrects_small_page_rotation():
+    image = np.full((700, 900, 3), 255, dtype=np.uint8)
+    for y in (160, 300, 440, 570):
+        cv2.line(image, (40, y), (860, y), (20, 20, 20), 3)
+    matrix = cv2.getRotationMatrix2D((450, 350), 3.0, 1.0)
+    skewed = cv2.warpAffine(image, matrix, (900, 700), borderValue=(255, 255, 255))
+    corrected, angle = OpenHandwritingIntake._deskew(skewed)
+    assert abs(angle) >= 0.5
+    assert abs(angle) <= 5.0
+    assert corrected.shape == skewed.shape
+
+
+def test_analysis_reports_geometry_and_quality_metadata(tmp_path):
+    path = tmp_path / "natural.jpg"
+    make_natural_page(path)
+    result = OpenHandwritingIntake().analyze(path).public_dict()
+    assert "perspective_corrected" in result
+    assert "deskew_degrees" in result
+    assert "page_corners" in result
+    assert result["line_count"] >= 2
+
+
+def test_rejects_decompression_bomb_dimensions():
+    from PIL import Image
+    from io import BytesIO
+    image = Image.new("RGB", (5001, 5000), "white")
+    output = BytesIO()
+    image.save(output, format="PNG", optimize=True)
+    try:
+        OpenHandwritingIntake().analyze_bytes(output.getvalue())
+    except ValueError as exc:
+        assert "24 megapixels" in str(exc)
+    else:
+        raise AssertionError("Images above the pixel safety limit must be rejected")
