@@ -80,6 +80,7 @@ The CI workflow also builds the Docker image and smoke-tests the API. Green unit
 - [Handwritten-text recognition](docs/HANDWRITTEN_TEXT_RECOGNITION.md)
 - [Natural handwriting variation](docs/NATURAL_HANDWRITING_VARIATION.md)
 - [Page and handwriting segmentation](docs/PAGE_HANDWRITING_SEGMENTATION.md)
+- [Handwriting-preserving image processing](docs/HANDWRITING_PRESERVING_IMAGE_PROCESSING.md)
 - [Optional worksheet instructions](docs/SAMPLE_SHEET_INSTRUCTIONS.md)
 - [HTR research notes and sources](docs/HTR_RESEARCH_NOTES.md)
 - [Launch readiness checklist](docs/LAUNCH.md)
