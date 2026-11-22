@@ -180,3 +180,13 @@ def test_exif_orientation_is_applied_before_analysis():
     decoded = OpenHandwritingIntake().decode(buffer.getvalue())
     assert decoded.shape[1] == 900
     assert decoded.shape[0] == 700
+
+
+def test_source_provenance_hash_is_returned_without_persisting_upload(tmp_path):
+    import hashlib
+    path = tmp_path / "natural.png"
+    make_natural_page(path)
+    raw = path.read_bytes()
+    result = OpenHandwritingIntake().analyze_bytes(raw).public_dict()
+    assert result["source_sha256"] == hashlib.sha256(raw).hexdigest()
+    assert "natural_line_and_column_segmentation" in result["processing"]
