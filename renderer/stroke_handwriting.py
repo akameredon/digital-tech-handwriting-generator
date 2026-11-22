@@ -80,6 +80,11 @@ class WriterProfile:
         data = json.loads(Path(path).read_text())
         fields = {k: v for k, v in data.items() if k in cls.__dataclass_fields__}
         if 'ink' in fields: fields['ink'] = tuple(fields['ink'])
+        if 'strokes' in fields:
+            fields['strokes'] = {
+                label: [[tuple(point) for point in stroke] for stroke in strokes]
+                for label, strokes in fields['strokes'].items()
+            }
         return cls(**fields)
 
     def save(self, path: str | Path) -> None:

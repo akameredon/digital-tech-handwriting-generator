@@ -31,4 +31,4 @@ def test_profile_round_trip_and_custom_trajectory(tmp_path):
     loaded = WriterProfile.load(path)
     assert loaded.name == "teacher-a"
     assert loaded.slant == 0.2
-    assert loaded.glyph("x") == [[[0.0, 0.0], [1.0, 1.0]]]
+    assert loaded.glyph("x") == [[(0.0, 0.0), (1.0, 1.0)]]

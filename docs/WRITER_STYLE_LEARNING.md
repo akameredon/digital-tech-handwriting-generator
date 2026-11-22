@@ -1,0 +1,22 @@
+# Writer-style learning and reconstruction
+
+`model/writer_style.py` implements Rank 2: learning a reusable writer identity from limited, verified samples without silently turning an incomplete alphabet into a finished profile.
+
+## Pipeline
+
+1. Accept only labeled samples whose label is verified by the teacher or a trusted worksheet position.
+2. Reject low-confidence and empty samples.
+3. Convert each crop into a normalized pen trajectory, preserving the sample's proportions and detached marks.
+4. Estimate writer-level scale, slant, stroke width, and pressure variation from robust sample medians.
+5. Keep coverage counts and missing characters so the application can request more evidence instead of fabricating confidence.
+6. Export a `WriterProfile` consumed directly by `HandwritingRenderer` for unseen words and lesson notes.
+
+```python
+from model.writer_style import VerifiedGlyphSample, WriterStyleLearner
+
+result = WriterStyleLearner().fit(samples, writer_name="Mrs Okafor")
+result.profile.save("mrs-okafor.json")
+print(result.public_dict())
+```
+
+Repeated samples of the same character are counted as variants. The primary trajectory is selected conservatively and the coverage metadata remains available for a future stochastic variant selector. This separation is intentional: writer identity is learned from evidence, while generation remains responsible for natural realization-level variation.
