@@ -78,6 +78,7 @@ The CI workflow also builds the Docker image and smoke-tests the API. Green unit
 - [Writer-style learning and reconstruction](docs/WRITER_STYLE_LEARNING.md)
 - [Character extraction and alignment](docs/CHARACTER_EXTRACTION_ALIGNMENT.md)
 - [Handwritten-text recognition](docs/HANDWRITTEN_TEXT_RECOGNITION.md)
+- [Natural handwriting variation](docs/NATURAL_HANDWRITING_VARIATION.md)
 - [Optional worksheet instructions](docs/SAMPLE_SHEET_INSTRUCTIONS.md)
 - [HTR research notes and sources](docs/HTR_RESEARCH_NOTES.md)
 - [Launch readiness checklist](docs/LAUNCH.md)
