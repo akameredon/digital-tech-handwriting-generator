@@ -52,6 +52,8 @@ class ClassmatePDFExporter:
         self.font_name = "Helvetica"
         self.fallback_font = "Helvetica"
         self.custom_supported = set()
+        self._initial_font_names = set(pdfmetrics._fonts)
+        self._initial_face_names = set(pdfmetrics._dynFaceNames)
         if font_path and Path(font_path).is_file():
             with FontToolsTTFont(str(font_path), checkChecksums=2) as parsed:
                 cmap = parsed.getBestCmap() or {}
@@ -82,6 +84,13 @@ class ClassmatePDFExporter:
                 ps_name = family_fonts._tt2ps_map.pop(key, None)
                 if ps_name:
                     family_fonts._ps2tt_map.pop(ps_name.lower(), None)
+        # ReportLab lazily registers fallback fonts when a canvas first uses
+        # them. Remove only names introduced by this export so a request does
+        # not leak registry state into later PDF requests or tests.
+        for registered_name in set(pdfmetrics._fonts) - self._initial_font_names:
+            pdfmetrics._fonts.pop(registered_name, None)
+        for face_name in set(pdfmetrics._dynFaceNames) - self._initial_face_names:
+            pdfmetrics._dynFaceNames.pop(face_name, None)
         self.font_name = "Helvetica"
         self.custom_supported = set()
 
@@ -93,12 +102,22 @@ class ClassmatePDFExporter:
     def _draw_mixed(self, c: canvas.Canvas, x: float, y: float, text: str, size: float,
                     color: Color = black) -> float:
         c.setFillColor(color)
+        if not text:
+            return x
         cursor = x
-        for char in text:
-            font = self._font_for(char)
-            c.setFont(font, size)
-            c.drawString(cursor, y, char)
-            cursor += pdfmetrics.stringWidth(char, font, size)
+        run_start = 0
+        run_font = self._font_for(text[0])
+        for index in range(1, len(text) + 1):
+            next_font = self._font_for(text[index]) if index < len(text) else None
+            if next_font == run_font:
+                continue
+            run = text[run_start:index]
+            c.setFont(run_font, size)
+            c.drawString(cursor, y, run)
+            cursor += pdfmetrics.stringWidth(run, run_font, size)
+            if next_font is not None:
+                run_start = index
+                run_font = next_font
         return cursor
 
     def _wrap(self, text: str, max_width: float, size: float) -> List[str]:
@@ -340,10 +359,11 @@ class ClassmatePDFExporter:
 
         def draw_header():
             c.setFillColor(black)
-            self._draw_mixed(
-                c, self.margin_left, self.page_height - 12 * mm, title[:55], 8
-            )
-            c.setFont("Helvetica", 8)
+            # Keep the metadata-bearing header as one standard-font text run.
+            # Some PDF extractors expose custom TrueType cmap entries as
+            # separate tokens; the title must remain searchable as normal
+            # text even when the body uses a teacher font.
+            c.drawString(self.margin_left, self.page_height - 12 * mm, title[:55])
             c.setFillColor(HexColor("#546E7A"))
             c.drawRightString(
                 self.page_width - self.margin_right,
