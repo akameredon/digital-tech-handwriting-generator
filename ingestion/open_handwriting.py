@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, Sequence, Tuple
@@ -39,6 +40,7 @@ class PageAnalysis:
     perspective_corrected: bool
     deskew_degrees: float
     page_corners: Optional[List[List[int]]]
+    source_sha256: Optional[str] = None
 
     def public_dict(self) -> Dict[str, Any]:
         return {
@@ -50,6 +52,8 @@ class PageAnalysis:
             "perspective_corrected": self.perspective_corrected,
             "deskew_degrees": round(self.deskew_degrees, 2),
             "page_corners": self.page_corners,
+            "source_sha256": self.source_sha256,
+            "processing": ["exif_orientation", "page_boundary_detection", "perspective_correction_if_confident", "deskew_if_confident", "contrast_normalization", "ruled_line_suppression", "natural_line_and_column_segmentation"],
             "lines": [
                 {"index": line.index, "bbox": list(line.bbox),
                  "ink_ratio": round(line.ink_ratio, 4)}
@@ -88,6 +92,8 @@ class OpenHandwritingIntake:
             with Image.open(BytesIO(image_bytes)) as source:
                 if source.format not in SUPPORTED_IMAGE_FORMATS:
                     raise HandwritingIntakeError("Unsupported image format. Upload a JPG, PNG or WebP photo.")
+                if source.width * source.height > 24_000_000:
+                    raise HandwritingIntakeError("This image has too many pixels to process safely. Resize it to 24 megapixels or less.")
                 source.load()
                 oriented = ImageOps.exif_transpose(source).convert("RGB")
                 image = cv2.cvtColor(np.asarray(oriented), cv2.COLOR_RGB2BGR)
@@ -192,10 +198,16 @@ class OpenHandwritingIntake:
 
     def analyze_bytes(self, image_bytes: bytes) -> PageAnalysis:
         image = self.decode(image_bytes)
-        return self.analyze_image(image)
+        analysis = self.analyze_image(image)
+        analysis.source_sha256 = hashlib.sha256(image_bytes).hexdigest()
+        return analysis
 
     def analyze(self, image_path: str | Path) -> PageAnalysis:
-        return self.analyze_image(self.load(image_path))
+        image_bytes = Path(image_path).read_bytes()
+        image = self.decode(image_bytes)
+        analysis = self.analyze_image(image)
+        analysis.source_sha256 = hashlib.sha256(image_bytes).hexdigest()
+        return analysis
 
     def analyze_image(self, image: np.ndarray) -> PageAnalysis:
         image, perspective_corrected, page_corners = self._rectify_page(image)
