@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import json
-import os
+import math
 from pathlib import Path
 import resource
 import time
@@ -165,7 +165,9 @@ def benchmark_provider(provider: HTRProvider, cases: Iterable[HTRBenchmarkCase])
         ))
 
     ordered_latencies = sorted(latencies)
-    p95_index = min(len(ordered_latencies) - 1, max(0, int(len(ordered_latencies) * 0.95) - 1))
+    # Use the nearest-rank convention so p95 of a small sample cannot report
+    # a value below the slowest observation when there are only a few cases.
+    p95_index = min(len(ordered_latencies) - 1, max(0, math.ceil(len(ordered_latencies) * 0.95) - 1))
     return HTRBenchmarkReport(
         provider=str(getattr(provider, "name", provider.__class__.__name__)),
         model_id=str(getattr(provider, "model_id", "unknown")),
