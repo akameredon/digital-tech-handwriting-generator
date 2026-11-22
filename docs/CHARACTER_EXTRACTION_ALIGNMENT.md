@@ -22,4 +22,11 @@ result = CharacterAligner().align_recognized_line(
 
 Candidates remain pending until the teacher confirms the label. Only the explicit confirmation path creates `CharacterObservation` records with verified provenance that can be passed to writer-profile or font-compilation code.
 
+`model/glyph_alignment_pipeline.py` now connects `HTRDocumentResult` to this
+gate. Provider-supplied character geometry is preserved through `model/htr.py`
+and passed to the aligner. If the provider returns only line text, the bridge
+returns a localized `character_geometry_missing` review result. It never
+reconstructs character boxes from transcript order, connected-component order,
+or x-position.
+
 The current TrOCR adapter is line-level and does not provide character geometry. Therefore it can support transcription and benchmarking, but it must not be used by itself for personalized glyph extraction. A future recognizer or alignment model must implement the geometry portion of the contract before natural-page glyph learning can be enabled.

@@ -33,6 +33,7 @@ class HTRLineResult:
     needs_review: bool
     review_reasons: Tuple[str, ...]
     provider: str
+    character_boxes: Tuple[Dict[str, Any], ...] = ()
 
     def public_dict(self) -> Dict[str, Any]:
         return {
@@ -44,6 +45,7 @@ class HTRLineResult:
             "needs_review": self.needs_review,
             "review_reasons": list(self.review_reasons),
             "provider": self.provider,
+            "character_boxes": [dict(box) for box in self.character_boxes],
         }
 
 
@@ -109,6 +111,30 @@ class HTRPipeline:
                 seen.append(normalized)
         return tuple(seen[:5])
 
+    @staticmethod
+    def _character_boxes(value: Any) -> Tuple[Dict[str, Any], ...]:
+        """Preserve explicit provider geometry for the alignment stage.
+
+        Malformed entries are retained as ``{"bbox": None}`` so the
+        downstream aligner can produce a localized review reason. Dropping an
+        entry here would turn a geometry mismatch into a dangerous positional
+        re-indexing opportunity.
+        """
+        if not isinstance(value, (list, tuple)):
+            return ()
+        boxes: List[Dict[str, Any]] = []
+        for item in value:
+            if isinstance(item, dict):
+                box = dict(item)
+            elif isinstance(item, (list, tuple)) and len(item) == 4:
+                box = {"bbox": list(item)}
+            else:
+                box = {"bbox": None}
+            if "bbox" in box and isinstance(box["bbox"], tuple):
+                box["bbox"] = list(box["bbox"])
+            boxes.append(box)
+        return tuple(boxes)
+
     def recognize(self, analysis: PageAnalysis) -> HTRDocumentResult:
         if self.provider is None:
             raise RecognitionUnavailable(
@@ -125,6 +151,7 @@ class HTRPipeline:
             text = self._clean_text(raw.get("text"))
             confidence = self._confidence(raw.get("confidence"))
             alternatives = self._alternatives(raw.get("alternatives"), text)
+            character_boxes = self._character_boxes(raw.get("character_boxes", raw.get("char_boxes")))
             reasons: List[str] = []
             if not text:
                 reasons.append("empty recognition")
@@ -136,6 +163,9 @@ class HTRPipeline:
             ambiguous = raw.get("ambiguous_characters", [])
             if ambiguous:
                 reasons.append("ambiguous characters: " + ", ".join(map(str, ambiguous)))
+            expected_characters = len([character for character in text if not character.isspace()])
+            if character_boxes and len(character_boxes) != expected_characters:
+                reasons.append("character geometry count mismatch")
             results.append(HTRLineResult(
                 line_index=region.index,
                 bbox=tuple(region.bbox),
@@ -145,6 +175,7 @@ class HTRPipeline:
                 needs_review=bool(reasons),
                 review_reasons=tuple(reasons),
                 provider=provider_name,
+                character_boxes=character_boxes,
             ))
         warnings: List[str] = []
         if any(line.needs_review for line in results):

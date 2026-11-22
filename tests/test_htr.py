@@ -48,3 +48,22 @@ def test_percentage_confidence_is_supported_and_text_is_cleaned():
 def test_missing_provider_is_explicit():
     with pytest.raises(RecognitionUnavailable, match="not configured"):
         HTRPipeline().recognize(analysis())
+
+
+def test_character_geometry_is_preserved_for_alignment():
+    class GeometryProvider:
+        name = "geometry-provider"
+
+        def recognize_lines(self, lines):
+            return [
+                {"text": "ab", "confidence": 0.96, "character_boxes": [
+                    {"bbox": [1, 2, 10, 20], "confidence": 0.94},
+                    {"bbox": [14, 2, 10, 20], "confidence": 0.92},
+                ]},
+                {"text": "ok", "confidence": 0.96, "character_boxes": [[1, 2, 10, 20]]},
+            ]
+
+    result = HTRPipeline(GeometryProvider()).recognize(analysis())
+    assert result.lines[0].character_boxes[0]["bbox"] == [1, 2, 10, 20]
+    assert result.lines[1].needs_review is True
+    assert "character geometry count mismatch" in result.lines[1].review_reasons
