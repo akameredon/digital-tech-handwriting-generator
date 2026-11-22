@@ -114,3 +114,31 @@ export async function exportHandwritingPdf(
   const missingCharacters = Number(response.headers.get("X-Handwriting-Missing-Count") ?? totalCharacters);
   return { blob, coveredCharacters, totalCharacters, missingCharacters };
 }
+
+export type NaturalPageAnalysis = {
+  status: "analyzed";
+  recognition_status: "not_configured";
+  message: string;
+  analysis: {
+    width: number;
+    height: number;
+    quality: "usable" | "limited";
+    warnings: string[];
+    line_count: number;
+    blur_score: number;
+    brightness: number;
+    perspective_corrected: boolean;
+    deskew_degrees: number;
+    page_corners: number[][] | null;
+    lines: Array<{ index: number; bbox: number[]; ink_ratio: number }>;
+  };
+};
+
+export async function analyzeNaturalPage(file: File): Promise<NaturalPageAnalysis> {
+  const form = new FormData();
+  form.append("page", file);
+  return readJson<NaturalPageAnalysis>(await fetch(`${API_BASE}/handwriting/analyze`, {
+    method: "POST",
+    body: form
+  }));
+}
