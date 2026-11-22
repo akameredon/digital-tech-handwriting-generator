@@ -1,8 +1,8 @@
 # Gate 1 — Frontend Baseline and Preservation Audit
 
-**Repository:** `akameredon/digital-tech-handwriting-generator`  
-**Audit date:** 2026-11-18  
-**Baseline branch:** `main`  
+**Repository:** `akameredon/ink-flow-handwriting-studio`.
+**Audit date:** 2026-11-18
+**Baseline branch:** `main`
 **Baseline commit inspected:** `f531207df799731930917a7beb0c9096145fed76`  
 **Scope:** Read-only architecture and source inspection. No production code or curriculum files changed.
 
@@ -74,7 +74,7 @@ Three test files are present:
 
 The latest inspected GitHub Actions run on the original `main` baseline commit `f531207df799731930917a7beb0c9096145fed76` completed successfully on 2026-11-18. The original workflow ran curriculum and preprocessor tests but omitted `tests/test_pipeline_smoke.py`.
 
-The feature branch expands CI to run the complete `tests/` directory and the frontend type-check/build. GitHub Actions run [44247418513](https://github.com/akameredon/digital-tech-handwriting-generator/actions/runs/44247418513), on feature commit `3d3462a9e0b5de1668e591b62daaedb54e198a7b`, completed successfully: **16 Python tests passed**, including the font compiler and PDF exporter smoke tests, and the frontend type-check, production build and application import checks all passed.
+The feature branch expands CI to run the complete `tests/` directory and the frontend type-check/build. GitHub Actions run [44247418513](https://github.com/akameredon/ink-flow-handwriting-studio/actions/runs/44247418513), on feature commit `3d3462a9e0b5de1668e591b62daaedb54e198a7b`, completed successfully: **16 Python tests passed**, including the font compiler and PDF exporter smoke tests, and the frontend type-check, production build and application import checks all passed.
 
 **Execution limitation:** this audit used the repository source and remote GitHub Actions evidence; it did not execute a fresh local clone/test run in this environment.
 

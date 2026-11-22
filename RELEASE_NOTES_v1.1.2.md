@@ -1,4 +1,4 @@
-# Digital Technologies Lesson Studio v1.1.2
+# Ink Flow Handwriting Studio v1.1.2
 
 ## Changes
 

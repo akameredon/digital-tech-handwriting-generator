@@ -1,6 +1,6 @@
 # Teacher UI — Experience and Visual Design Specification
 
-**Product:** Digital Technologies Lesson Note Generator  
+**Product:** Ink Flow Handwriting Studio
 **Audience:** Nigerian secondary-school teachers (SS1–SS3)  
 **Primary goal:** Let a teacher select a curriculum lesson, understand what is available, prepare the note and download a standard printable PDF. The interface must clearly disclose that handwriting conversion is not currently available.
 

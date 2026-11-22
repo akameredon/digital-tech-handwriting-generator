@@ -54,4 +54,4 @@ Return specific 4xx errors for unsupported or unreadable scans. Log unexpected f
 
 ## Explicit non-goal
 
-Do not make a rigid template a requirement for ordinary D.Lesson Studio use. An optional worksheet can provide a controlled, teacher-confirmed sample for the experimental font path, but ordinary natural handwriting remains the intended input for a future complete recognition feature.
+Do not make a rigid template a requirement for ordinary Ink Flow Handwriting Studio use. An optional worksheet can provide a controlled, teacher-confirmed sample for the experimental font path, but ordinary natural handwriting remains the intended input for a future complete recognition feature.

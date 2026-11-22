@@ -88,7 +88,7 @@ def write_calibration_sheet(output_path: str | Path) -> Path:
 
     pdf.setFillColor(HexColor("#69778A"))
     pdf.setFont("Helvetica", 7)
-    pdf.drawRightString(PAGE_WIDTH - 35, 18, "D. Lesson Studio · Worksheet v1")
+    pdf.drawRightString(PAGE_WIDTH - 35, 18, "Ink Flow Handwriting Studio · Worksheet v1")
     pdf.save()
     return output
 

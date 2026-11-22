@@ -1,4 +1,4 @@
-# Release v1.0.0 – Digital Technologies Lesson Note Generator
+# Ink Flow Handwriting Studio — Release v1.0.0
 
 **Date:** 2026-11-18  
 **Status at publication (superseded):** This was a launch claim, not evidence of production readiness.
@@ -18,8 +18,8 @@
 ## How to use immediately
 
 ```bash
-git clone https://github.com/akameredon/digital-tech-handwriting-generator.git
-cd digital-tech-handwriting-generator
+git clone https://github.com/akameredon/ink-flow-handwriting-studio.git
+cd ink-flow-handwriting-studio
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt

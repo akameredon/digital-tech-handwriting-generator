@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "digital-tech-lesson-generator"
 version = "1.1.2"
-description = "NERDC 2025 Digital Technologies Lesson Note Generator for Nigerian SS1–SS3"
+description = "Ink Flow Handwriting Studio — NERDC 2025 Digital Technologies lesson-note tools for Nigerian SS1–SS3"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"

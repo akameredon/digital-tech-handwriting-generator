@@ -88,7 +88,7 @@ class HandwritingUploadLimitMiddleware:
             await response(scope, receive, send)
 
 app = FastAPI(
-    title="Digital Technologies Lesson Note Generator",
+    title="Ink Flow Handwriting Studio",
     description="NERDC 2025 aligned lesson notes for SS1-SS3 Digital Technologies",
     version="1.1.2"
 )
@@ -107,7 +107,7 @@ if (FRONTEND_DIST / "assets").is_dir():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "Digital Technologies Lesson Note Generator", "version": "1.1.2"}
+    return {"status": "ok", "service": "Ink Flow Handwriting Studio", "version": "1.1.2"}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -120,7 +120,7 @@ async def home():
     return f"""
     <html>
     <head>
-        <title>Digital Technologies Lesson Note Generator</title>
+        <title>Ink Flow Handwriting Studio</title>
         <style>
             body{{font-family:system-ui,sans-serif;max-width:920px;margin:40px auto;padding:0 20px;line-height:1.5}}
             h1{{color:#1a237e}} h2{{color:#0d47a1;margin-top:1.8em}}
@@ -133,7 +133,7 @@ async def home():
         </style>
     </head>
     <body>
-        <h1>Digital Technologies Lesson Note Generator</h1>
+        <h1>Ink Flow Handwriting Studio</h1>
         <p>NERDC 2025 • SS1 – SS3 • v1.1.2</p>
 
         <div class="card">

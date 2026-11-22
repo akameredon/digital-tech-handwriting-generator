@@ -19,7 +19,7 @@ from curriculum.sample_notes import get_prepared_lesson
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Digital Technologies Lesson Note Generator")
+    parser = argparse.ArgumentParser(description="Ink Flow Handwriting Studio — Digital Technologies lesson notes")
     parser.add_argument("--class", dest="class_level", help="SS1, SS2 or SS3")
     parser.add_argument("--term", help='e.g. "First Term", "Second Term", "Third Term"')
     parser.add_argument("--week", type=int, help="Week number")

@@ -2,7 +2,7 @@
 
 ## Mission
 
-Deliver a calm, exceptionally clear, mobile-first teacher experience for the existing Digital Technologies Lesson Note Generator. Improve access and usability without replacing or weakening the curriculum, lesson-generation, handwriting-processing, PDF-export, CLI, or FastAPI capabilities already in this repository.
+Deliver a calm, exceptionally clear, mobile-first teacher experience for Ink Flow Handwriting Studio. Improve access and usability without replacing or weakening the curriculum, lesson-generation, handwriting-processing, PDF-export, CLI, or FastAPI capabilities already in this repository.
 
 This document is a guarded implementation plan. It does not authorize destructive backend changes.
 

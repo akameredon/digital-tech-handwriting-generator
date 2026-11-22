@@ -1,9 +1,9 @@
 #!/bin/bash
-# Quick start script for Digital Technologies Lesson Note Generator
+# Quick start script for Ink Flow Handwriting Studio
 
 echo "=============================================="
-echo " Digital Technologies Lesson Note Generator"
-echo " NERDC 2025 • SS1–SS3 • Production Ready"
+echo " Ink Flow Handwriting Studio"
+echo " NERDC 2025 • SS1–SS3"
 echo "=============================================="
 echo ""
 

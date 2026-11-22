@@ -55,11 +55,11 @@ jobs:
         run: npm run build
 
       - name: Build Docker image
-        run: docker build -t digital-tech-handwriting-generator:ci .
+        run: docker build -t ink-flow-handwriting-studio:ci .
 
       - name: Smoke-test the built Docker application
         run: |
-          docker run -d --name dt-lesson-ui-ci -p 8000:8000 digital-tech-handwriting-generator:ci
+          docker run -d --name dt-lesson-ui-ci -p 8000:8000 ink-flow-handwriting-studio:ci
           trap 'docker rm -f dt-lesson-ui-ci >/dev/null 2>&1 || true' EXIT
           for attempt in $(seq 1 20); do
             if curl -fsS http://127.0.0.1:8000/health >/dev/null; then

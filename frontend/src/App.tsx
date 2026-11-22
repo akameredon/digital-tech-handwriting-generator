@@ -195,8 +195,8 @@ function App() {
       <a className="skip-link" href="#main-content">Skip to main content</a>
       <aside className="sidebar">
         <a className="brand" href="#" onClick={(event) => { event.preventDefault(); changeSection("create"); }}>
-          <span className="brand-mark">D<span>.</span></span>
-          <span className="brand-copy"><strong>Lesson Studio</strong><small>Digital Technologies</small></span>
+          <span className="brand-mark">IF</span>
+          <span className="brand-copy"><strong>Ink Flow</strong><small>Handwriting Studio</small></span>
         </a>
         <div className="sidebar-label">WORKSPACE</div>
         <nav className="side-nav" aria-label="Main navigation">
@@ -216,7 +216,7 @@ function App() {
 
       <main className="main-area" id="main-content" tabIndex={-1}>
         <header className="topbar">
-          <div className="mobile-brand"><span className="brand-mark">D<span>.</span></span><strong>Lesson Studio</strong></div>
+          <div className="mobile-brand"><span className="brand-mark">IF</span><strong>Ink Flow</strong></div>
           <div className="topbar-context"><span>TEACHER WORKSPACE</span><span className="context-separator">/</span><strong>{sectionLabel(section)}</strong></div>
           <span className="version-chip">NERDC 2025 · SS1–SS3</span>
         </header>
@@ -425,7 +425,7 @@ function App() {
               <span>{error ? "!" : "✓"}</span><p>{error || notice}</p><button onClick={() => { setError(""); setNotice(""); }} aria-label="Dismiss message">×</button>
             </div>
           )}
-          <footer className="page-footer"><span>Digital Technologies Lesson Studio</span><span>Curriculum-led. Teacher-friendly.</span></footer>
+          <footer className="page-footer"><span>Ink Flow Handwriting Studio</span><span>Curriculum-led. Teacher-friendly.</span></footer>
         </div>
       </main>
     </div>
