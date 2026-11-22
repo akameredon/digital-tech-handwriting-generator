@@ -82,6 +82,7 @@ The CI workflow also builds the Docker image and smoke-tests the API. Green unit
 - [Workstream 5 release hardening](docs/WORKSTREAM_5_RELEASE_HARDENING.md)
 - [Workstream 6 operational readiness](docs/WORKSTREAM_6_OPERATIONAL_READINESS.md)
 - [Workstream 7 deployment smoke gate](docs/WORKSTREAM_7_DEPLOYMENT_SMOKE_GATE.md)
+- [Workstream 8 runtime performance](docs/WORKSTREAM_8_RUNTIME_PERFORMANCE.md)
 - [Natural handwriting variation](docs/NATURAL_HANDWRITING_VARIATION.md)
 - [Page and handwriting segmentation](docs/PAGE_HANDWRITING_SEGMENTATION.md)
 - [Handwriting-preserving image processing](docs/HANDWRITING_PRESERVING_IMAGE_PROCESSING.md)

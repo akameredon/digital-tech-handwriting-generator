@@ -74,6 +74,7 @@ jobs:
           curl -fsS -D /tmp/headers.txt -o /dev/null http://127.0.0.1:8000/health
           grep -iq '^x-request-id:' /tmp/headers.txt
           python scripts/smoke_deployment.py --base-url http://127.0.0.1:8000
+          python scripts/benchmark_runtime.py --base-url http://127.0.0.1:8000 --requests 2 --concurrency 1 --p95-budget-ms 5000
 
       - name: Run complete Python test suite
         run: python -m pytest tests/ -v
